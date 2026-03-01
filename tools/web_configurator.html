@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32-S3 FIDO2 Macropad Configurator</title>
+    <link rel="stylesheet" href="web_configurator.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 ESP32-S3 FIDO2 Macropad</h1>
+            <p>Dynamic Configuration Interface</p>
+            <div id="connectionStatus" class="connection-status status-disconnected">
+                ⚠️ Not Connected
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Connection Section -->
+            <div class="section">
+                <h2>🔌 Connection</h2>
+                <div class="button-group">
+                    <button id="connectBtn" onclick="connectSerial()">Connect to Macropad</button>
+                    <button id="disconnectBtn" onclick="disconnectSerial()" disabled>Disconnect</button>
+                    <button onclick="refreshSettings()">Refresh Settings</button>
+                </div>
+            </div>
+
+            <!-- Macro Configuration (hidden until connected) -->
+            <div class="section" id="sectionMacros" style="display:none;">
+                <h2>⌨️ Macro Configuration</h2>
+                <div class="macros-grid" id="macrosGrid">
+                    <!-- Macros will be generated here -->
+                </div>
+            </div>
+
+            <!-- LED Configuration (hidden until connected) -->
+            <div class="section" id="sectionLEDs" style="display:none;">
+                <h2>💡 LED Configuration</h2>
+                <div class="form-group">
+                    <label>Brightness: <span id="brightnessValue">50</span></label>
+                    <input type="range" id="brightnessSlider" min="0" max="255" value="50" 
+                           oninput="document.getElementById('brightnessValue').textContent = this.value">
+                    <button onclick="setBrightness()">Set Brightness</button>
+                </div>
+                <div class="led-config" id="ledConfig">
+                    <!-- LED items will be generated here -->
+                </div>
+            </div>
+
+            <!-- OS Mode (hidden until connected) -->
+            <div class="section" id="sectionOS" style="display:none;">
+                <h2>🖥️ Operating System Mode</h2>
+                <div class="os-selector">
+                    <div class="os-option" id="osMac" onclick="selectOS('mac')">
+                        <h3>🍎 macOS</h3>
+                        <p>Cmd key shortcuts</p>
+                    </div>
+                    <div class="os-option" id="osWin" onclick="selectOS('win')">
+                        <h3>🪟 Windows</h3>
+                        <p>Ctrl key shortcuts</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions (hidden until connected) -->
+            <div class="section" id="sectionActions" style="display:none;">
+                <h2>⚙️ Actions</h2>
+                <div class="button-group">
+                    <button onclick="listSettings()">List All Settings</button>
+                    <button onclick="resetDefaults()">Reset to Defaults</button>
+                    <button onclick="exportConfig()">Export Configuration</button>
+                    <button onclick="clearLog()">Clear Log</button>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div class="section">
+                <h2>📋 Log</h2>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sequence Builder Modal -->
+    <div id="sequenceModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">🔗 Configure Key Sequence</h2>
+                <span class="modal-close" onclick="closeSequenceModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Sequence builder content will be inserted here -->
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeSequenceModal()" class="btn-cancel">Cancel</button>
+                <button onclick="saveSequenceFromModal()" class="btn-save">💾 Save Sequence</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="web_configurator.js"></script>
+</body>
+</html>

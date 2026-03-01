@@ -1,0 +1,380 @@
+========================================
+  FIRMWARE ARCHITECTURE
+  ESP32-S3 FIDO2 Macropad
+========================================
+
+OVERVIEW
+--------
+The firmware is structured in a modular architecture with clear separation of concerns:
+- Hardware drivers
+- Input handling (keys, encoders)
+- Output control (display, LEDs)
+- USB HID communication
+- FIDO2/CTAP2 protocol implementation
+- Security layer (ATECC608A + Fingerprint)
+
+========================================
+SYSTEM LAYERS
+========================================
+
+┌─────────────────────────────────────┐
+│      Application Layer              │
+│  - Macro execution                  │
+│  - FIDO2 authentication flow        │
+│  - User interface logic             │
+└─────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────┐
+│      Protocol Layer                 │
+│  - CTAP2 protocol handler           │
+│  - USB HID communication            │
+│  - Credential management            │
+└─────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────┐
+│      Security Layer                 │
+│  - Fingerprint verification         │
+│  - ATECC608A cryptography           │
+│  - Credential storage               │
+└─────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────┐
+│      Hardware Abstraction Layer     │
+│  - Key matrix scanning              │
+│  - Encoder reading                  │
+│  - Display driver                   │
+│  - LED control                      │
+│  - UART (fingerprint)               │
+│  - I2C (OLED, ATECC608A)            │
+└─────────────────────────────────────┘
+
+========================================
+MAIN PROGRAM FLOW
+========================================
+
+1. INITIALIZATION
+   ├─ Initialize all hardware
+   ├─ Load configuration from EEPROM
+   ├─ Initialize USB HID
+   ├─ Configure ATECC608A
+   └─ Display ready screen
+
+2. MAIN LOOP
+   ├─ Scan key matrix (10ms interval)
+   ├─ Read encoder states
+   ├─ Check USB HID requests
+   ├─ Update display
+   └─ Update LEDs
+
+3. EVENT HANDLING
+   ├─ Key press → Execute macro
+   ├─ Encoder turn → Adjust volume/scroll
+   ├─ FIDO2 request → Authentication flow
+   └─ Fingerprint scan → Verify & respond
+
+========================================
+FIDO2 AUTHENTICATION FLOW
+========================================
+
+HOST REQUEST (Browser/OS)
+    ↓
+[1] ESP32 receives CTAP2 command via USB HID
+    ↓
+[2] Parse request (MakeCredential or GetAssertion)
+    ↓
+[3] Display prompt on OLED
+    "Scan finger for GitHub.com"
+    ↓
+[4] Wait for fingerprint scan
+    ├─ Set LED to yellow (waiting)
+    └─ Monitor fingerprint sensor
+    ↓
+[5] Fingerprint sensor verification
+    ├─ Match → Continue
+    └─ No match → Display error, return
+    ↓
+[6] ATECC608A cryptographic operation
+    ├─ MakeCredential: Generate new key pair
+    └─ GetAssertion: Sign challenge
+    ↓
+[7] Store/Retrieve credential
+    ├─ Store in EEPROM with RP ID
+    └─ Link to fingerprint ID
+    ↓
+[8] Send CTAP2 response to host
+    ↓
+[9] Display success
+    ├─ "Login Success!"
+    └─ Set LED to green
+    ↓
+[10] Return to idle after 2 seconds
+
+========================================
+KEY MATRIX SCANNING ALGORITHM
+========================================
+
+FOR each row (3 rows):
+    SET row pin LOW (activate)
+    WAIT 10µs (signal settle)
+    
+    FOR each column (4 columns):
+        READ column pin
+        IF pin is LOW:
+            Key is PRESSED
+        ELSE:
+            Key is RELEASED
+        
+        IF state changed:
+            Handle key event
+            Update display
+            Flash LED
+    
+    SET row pin HIGH (deactivate)
+NEXT row
+
+Debouncing: 10ms delay between scans
+
+========================================
+ENCODER READING (INTERRUPT-DRIVEN)
+========================================
+
+Encoder 1 (Volume):
+    INTERRUPT on CLK pin change
+    READ CLK and DT states
+    IF CLK != last CLK:
+        IF DT != CLK:
+            Increment position (clockwise)
+        ELSE:
+            Decrement position (counter-clockwise)
+    
+    UPDATE volume level
+    SEND HID volume key
+
+Encoder 2 (Navigation):
+    Same logic as Encoder 1
+    Used for scrolling or menu navigation
+
+========================================
+USB HID COMPOSITE DEVICE
+========================================
+
+The ESP32-S3 presents as TWO USB devices:
+
+1. Keyboard HID Device
+   - Report ID: 0x01
+   - Standard keyboard reports
+   - Used for macro keys
+
+2. FIDO2 HID Device
+   - Report ID: 0x02
+   - CTAP2 HID protocol
+   - Used for WebAuthn/FIDO2
+
+USB Descriptor Structure:
+┌──────────────────────────┐
+│  USB Device              │
+│  ├─ Configuration        │
+│  │  ├─ Interface 0       │
+│  │  │  └─ HID Keyboard   │
+│  │  └─ Interface 1       │
+│  │     └─ HID FIDO2      │
+└──────────────────────────┘
+
+========================================
+CTAP2 PROTOCOL IMPLEMENTATION
+========================================
+
+Commands to Implement:
+1. authenticatorMakeCredential
+   - Generate new credential
+   - Store in EEPROM
+   - Return public key
+
+2. authenticatorGetAssertion
+   - Find credential by RP ID
+   - Sign challenge with ATECC608A
+   - Return signature
+
+3. authenticatorGetInfo
+   - Return device capabilities
+   - Supported versions
+   - Max credential size
+
+4. authenticatorClientPIN
+   - Not needed (using fingerprint)
+
+5. authenticatorReset
+   - Clear all credentials
+   - Factory reset
+
+Data Structures:
+- PublicKeyCredentialRpEntity
+- PublicKeyCredentialUserEntity
+- PublicKeyCredentialParameters
+- AuthenticatorData
+- AttestationObject
+
+========================================
+CREDENTIAL STORAGE
+========================================
+
+Storage Medium: ESP32 EEPROM (emulated)
+Max Credentials: 20-30 (depending on size)
+
+Credential Structure:
+┌──────────────────────────┐
+│ Credential ID (16 bytes) │
+│ RP ID Hash (32 bytes)    │
+│ User ID (up to 64 bytes) │
+│ Key Handle (32 bytes)    │
+│ Counter (4 bytes)        │
+│ Fingerprint ID (1 byte)  │
+│ Timestamp (4 bytes)      │
+└──────────────────────────┘
+
+Total: ~153 bytes per credential
+
+========================================
+SECURITY CONSIDERATIONS
+========================================
+
+1. Private Keys
+   - NEVER leave ATECC608A
+   - All signing done on chip
+   - Keys cannot be extracted
+
+2. Fingerprint Templates
+   - Stored in sensor (not ESP32)
+   - Never transmitted
+   - Sensor returns match/no-match only
+
+3. Credential Protection
+   - Each credential linked to fingerprint
+   - Cannot use without biometric verification
+   - Counter prevents replay attacks
+
+4. PIN Protection
+   - Optional: Set device PIN
+   - Stored encrypted in EEPROM
+   - Limits authentication attempts
+
+========================================
+DISPLAY MODES
+========================================
+
+Mode 1: IDLE
+┌────────────────┐
+│ MACROPAD READY │
+│ [1:Copy] [2:..│
+│ Volume: ▓▓▓░ 60%│
+└────────────────┘
+
+Mode 2: FIDO2 AUTH
+┌────────────────┐
+│ 🔐 PASSKEY AUTH │
+│ GitHub.com     │
+│ >> SCAN FINGER │
+└────────────────┘
+
+Mode 3: SUCCESS
+┌────────────────┐
+│   ✓ LOGIN      │
+│   SUCCESS!     │
+└────────────────┘
+
+Mode 4: ERROR
+┌────────────────┐
+│   ✗ AUTH       │
+│   FAILED       │
+└────────────────┘
+
+Mode 5: MACRO EXECUTE
+┌────────────────┐
+│ KEY 3 PRESSED  │
+│ Ctrl+S (Save)  │
+└────────────────┘
+
+========================================
+LED PATTERNS
+========================================
+
+Pattern 0: IDLE
+- Soft blue underglow
+- Static, no animation
+
+Pattern 1: ACTIVE
+- Green glow
+- Breathing effect
+
+Pattern 2: FIDO2 WAITING
+- Yellow/orange glow
+- Pulsing
+
+Pattern 3: SUCCESS
+- Green flash
+- Then fade to idle
+
+Pattern 4: ERROR
+- Red flash (3x)
+- Then fade to idle
+
+Pattern 5: KEY PRESS
+- White flash on specific LED
+- Return to previous pattern
+
+========================================
+CONFIGURATION
+========================================
+
+Stored in EEPROM:
+- Macro key assignments
+- LED brightness
+- Volume level
+- Credentials
+- Device name
+- PIN (if set)
+
+Configuration Commands (via Serial):
+- SET_MACRO <key> <action>
+- SET_BRIGHTNESS <0-255>
+- SET_VOLUME <0-100>
+- RESET_DEVICE
+- LIST_CREDENTIALS
+
+========================================
+DEVELOPMENT PHASES
+========================================
+
+Phase 1: Hardware Testing ✓
+- Individual component tests
+- Verify all connections
+- Confirm GPIO assignments
+
+Phase 2: Basic Functionality
+- Macro key functionality
+- Encoder volume control
+- OLED display modes
+- LED patterns
+
+Phase 3: FIDO2 Core
+- USB HID composite device
+- CTAP2 protocol parser
+- ATECC608A integration
+
+Phase 4: Biometric Integration
+- Fingerprint enrollment
+- Fingerprint verification
+- Link fingerprints to credentials
+
+Phase 5: Full Integration
+- Complete FIDO2 flow
+- Credential management
+- Error handling
+
+Phase 6: Polish & Optimization
+- Performance tuning
+- Power optimization
+- User experience refinement
+
+========================================
+

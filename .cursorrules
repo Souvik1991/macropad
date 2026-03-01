@@ -1,0 +1,43 @@
+# Cursor IDE Rules for ESP32-S3 FIDO2 Macropad Project
+
+## File Management Rules
+
+### Markdown Files (.md)
+- **DO NOT create unnecessary new markdown files**
+- **ALWAYS check for existing markdown files first** before creating new ones
+- **Update existing markdown files** instead of creating duplicates
+- **CONFIRM with the user** before creating any new markdown file
+- If a new markdown file is truly needed, explain why the existing ones cannot be used
+
+### Existing Markdown Files
+- `ESP32_S3_Macropad_Wiring_Diagram.md` - Single source of truth for wiring and pin assignments
+- `ESP32_S3_FIDO2_Macropad_Project.md` - Project overview, requirements, and configuration system (MAIN DOC)
+- `DISPLAY_LAYOUT.md` - Display layouts and UI mockups
+- `LIBRARIES.txt` - Library dependencies (text file, but treat similarly)
+- `tools/CONFIGURATOR_README.md` - Configurator user guide (tool-specific)
+
+### When Creating New Markdown Files
+1. Check if the content fits in an existing file
+2. If yes → Update the existing file
+3. If no → Ask the user: "I need to create a new markdown file: [filename].md for [reason]. Is this okay?"
+4. Wait for confirmation before creating
+
+### Code Organization
+- Keep firmware code in `firmware/` directory
+- Keep test sketches in `tests/` directory
+- Keep tools and utilities in `tools/` directory
+- Keep shared libraries in `lib/` directory (reusable .h/.cpp files)
+- Use descriptive file names that indicate purpose
+
+### DRY (Don't Repeat Yourself)
+- **NEVER duplicate logic across files.** If the same code exists in the firmware and a test sketch, extract it into a shared library under `lib/`.
+- Shared modules (e.g., EEPROM helpers, config structs, pin definitions) must live in their own `.h` / `.cpp` files that both firmware and test sketches `#include`.
+- Before writing any helper function, check if it already exists in `lib/`, `firmware/`, or another test. If it does, reuse it via `#include`.
+- When a test sketch needs firmware logic (e.g., `saveMacro`, `loadKeyName`, EEPROM layout constants), it must include the shared header — not copy-paste the implementation.
+- Constants and struct definitions that are used by more than one sketch (e.g., `MacroConfig`, EEPROM addresses, pin mappings) belong in a shared header, not duplicated in each `.ino`.
+
+### General Guidelines
+- Avoid creating redundant documentation files
+- Consolidate related information into existing files
+- When in doubt, ask the user before creating new files
+

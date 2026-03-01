@@ -1,0 +1,288 @@
+========================================
+  ESP32-S3 FIDO2 MACROPAD
+  USAGE GUIDE
+========================================
+
+## 🖥️ KVM SWITCH / USB HUB SETUP
+
+Your macropad automatically detects when you switch systems!
+
+### How It Works:
+
+1. **First Boot:**
+   - Connect to Windows PC
+   - Macropad defaults to Windows mode
+   - Display shows "OS: Windows"
+
+2. **Switch to Mac:**
+   - Press your KVM/USB hub button
+   - Macropad disconnects and reconnects
+   - **Automatically switches to macOS mode**
+   - Display shows "OS: Mac"
+   - All shortcuts now work for Mac!
+
+3. **Switch Back to Windows:**
+   - Press hub button again
+   - Macropad auto-switches to Windows mode
+   - Display shows "OS: Windows"
+
+### Visual Indicators:
+
+- **Windows Mode:** Green LED flash on boot
+- **macOS Mode:** Blue LED flash on boot
+- **Display:** Shows current OS in top-right
+
+========================================
+## ⌨️ KEY LAYOUT
+========================================
+
+### ROW 1 (System Controls)
+
+┌────────┬────────┬────────┬────────┐
+│   1    │   2    │   3    │   4    │
+│Screen  │  Mic   │ Video  │ Lock   │
+│ shot   │ Toggle │ Toggle │ Screen │
+└────────┴────────┴────────┴────────┘
+
+**Key 1: Screenshot**
+- Windows: Win+Shift+S (Snipping Tool)
+- Mac: Cmd+Shift+4 (Area screenshot)
+
+**Key 2: Mic Mute/Unmute**
+- Sends: Ctrl+Shift+M
+- ⚠️ Configure in your app:
+  - Zoom: Settings → Keyboard Shortcuts → Mute/Unmute
+  - Webex: Preferences → Keyboard Shortcuts → Mute
+  - Google Meet: Use browser extension for global hotkey
+
+**Key 3: Video On/Off**
+- Sends: Ctrl+Shift+V
+- ⚠️ Configure in your app:
+  - Zoom: Settings → Keyboard Shortcuts → Start/Stop Video
+  - Webex: Preferences → Keyboard Shortcuts → Video
+  - Google Meet: Use browser extension
+
+**Key 4: Lock Screen**
+- Windows: Win+L
+- Mac: Cmd+Ctrl+Q
+
+### ROW 2 (Editing)
+
+┌────────┬────────┬────────┬────────┐
+│   5    │   6    │   7    │   8    │
+│ Copy   │  Cut   │ Paste  │ Delete │
+└────────┴────────┴────────┴────────┘
+
+**Key 5: Copy**
+- Windows: Ctrl+C
+- Mac: Cmd+C
+
+**Key 6: Cut**
+- Windows: Ctrl+X
+- Mac: Cmd+X
+
+**Key 7: Paste**
+- Windows: Ctrl+V
+- Mac: Cmd+V
+
+**Key 8: Delete**
+- Single tap: Delete
+- **Double tap (within 0.5s): Shift+Delete (Permanent delete)**
+
+### ROW 3 (Developer Tools)
+
+┌────────┬────────┬────────┬────────┐
+│   9    │   10   │   11   │   12   │
+│ Cursor │ Inspect│Terminal│  Git   │
+│  IDE   │Element │        │  Pull  │
+└────────┴────────┴────────┴────────┘
+
+**Key 9: Open Cursor IDE**
+- Windows: Win+R → "cursor"
+- Mac: Cmd+Space → "cursor"
+- ⚠️ Requires Cursor installed in PATH
+
+**Key 10: Inspect Element**
+- All browsers: F12
+
+**Key 11: Open Terminal**
+- Windows: Opens cmd.exe
+- Mac: Opens Terminal.app
+
+**Key 12: Git Pull**
+- Types: "git pull" + Enter
+- ⚠️ Terminal must be open in your git repo folder
+
+========================================
+## 🎛️ ROTARY ENCODERS
+========================================
+
+### ENCODER 1 (Left) - Volume Control
+
+**Rotate:**
+- Clockwise: Volume Up
+- Counter-clockwise: Volume Down
+- Display shows volume bar
+
+**Press:**
+- Mute/Unmute (future feature)
+
+### ENCODER 2 (Right) - OS Mode Switch
+
+**Rotate:**
+- Scroll up/down (Page Up/Down)
+
+**Press:**
+- **Manually toggle OS mode**
+- Use if auto-switch doesn't work
+- Green flash = Windows
+- Blue flash = Mac
+
+========================================
+## 🔒 FIDO2 PASSKEY AUTHENTICATION
+========================================
+
+### Setup (Future Feature)
+
+1. Go to website (GitHub, Google, etc.)
+2. Settings → Security → Passkeys
+3. Click "Add Passkey"
+4. Select "Security Key"
+5. Macropad displays: "SCAN FINGER"
+6. Place finger on sensor
+7. Credential created!
+
+### Login
+
+1. Go to website login page
+2. Click "Sign in with Passkey"
+3. Macropad displays: "SCAN FINGER"
+4. Place finger on sensor
+5. ✓ Logged in!
+
+========================================
+## 🚨 TROUBLESHOOTING
+========================================
+
+### OS Mode Not Switching Automatically
+
+**Symptoms:**
+- Shortcuts don't work after switching systems
+- Display shows wrong OS
+
+**Solutions:**
+1. **Manually toggle:** Press Encoder 2 button
+2. **Check hub:** Make sure USB power cycles (macropad reboots)
+3. **Disable auto-switch:** Hold Encoder 1 during boot
+
+### Mic/Video Toggle Not Working
+
+**Cause:** Apps don't have global hotkey configured
+
+**Fix:**
+1. Open Zoom/Webex/Google Meet
+2. Go to Settings → Keyboard Shortcuts
+3. Set mic mute to: Ctrl+Shift+M
+4. Set video toggle to: Ctrl+Shift+V
+
+### Cursor/Terminal Won't Open
+
+**Cause:** App not in system PATH
+
+**Fix:**
+1. **Cursor:** 
+   - Windows: Add to PATH during install
+   - Mac: Cmd+Shift+P → "Install 'cursor' command"
+   
+2. **Terminal:**
+   - Windows: cmd.exe is built-in
+   - Mac: Terminal.app is built-in
+
+### Git Pull Does Nothing
+
+**Cause:** Terminal not in git repo
+
+**Fix:**
+1. Open terminal manually first (Key 11)
+2. Navigate to your git repo: cd /path/to/repo
+3. NOW press Key 12 (git pull)
+
+========================================
+## 🎨 LED INDICATORS
+========================================
+
+**Idle Mode:**
+- Soft blue underglow
+
+**Key Press:**
+- White flash on corresponding LED
+
+**OS Switch:**
+- Windows: Green flash (200ms)
+- Mac: Blue flash (200ms)
+
+**FIDO2 Active:**
+- Yellow/orange pulsing
+
+**Success:**
+- Green flash
+
+**Error:**
+- Red flash (3x)
+
+========================================
+## 🔧 ADVANCED CONFIGURATION
+========================================
+
+### Change OS Mode Default
+
+Edit in code:
+```cpp
+// In FIDO2_Macropad_Modular.ino
+OperatingSystem currentOS = OS_MAC;  // Start with Mac instead
+```
+
+### Disable Auto-Switch on Reconnect
+
+Edit in code:
+```cpp
+// In settings.ino
+bool autoSwitchOnReconnect = false;
+```
+
+### Customize Macros
+
+Edit in code:
+```cpp
+// In keymatrix.ino → executeMacro() function
+case 12:  // Change Key 12
+  sendString("npm install");  // Custom command
+  sendKey(HID_KEY_ENTER);
+  break;
+```
+
+========================================
+## 📱 SERIAL COMMANDS (Debug)
+========================================
+
+Connect to serial monitor (115200 baud):
+
+**View current OS:**
+```
+Current OS: Windows
+```
+
+**Manual OS switch:**
+Press Encoder 2 button, see:
+```
+OS Mode switched to: macOS
+```
+
+**Key presses logged:**
+```
+Key pressed: 5 (R2C1)
+  -> Copy (Ctrl+C)
+```
+
+========================================
+
