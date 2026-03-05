@@ -2,8 +2,8 @@
 
 **Project:** Passwordless Browser Authentication Macropad  
 **MCU:** Adafruit ESP32-S3 Feather (8MB Flash)  
-**Date:** 2025-11-14  
-**Version:** 2.0 - **FINAL CORRECTED PIN ASSIGNMENTS**
+**Date:** 2026-03-04  
+**Version:** 2.3 - **SYNCED WITH SCHEMATIC (macropad_v2.net)**
 
 ---
 
@@ -24,24 +24,52 @@
 | **GPIO15** | Matrix Col 3 | All keys |
 | **GPIO16** | Matrix Col 4 | All keys |
 | **GPIO17** | LED Data | 5× WS2812B (via shifter) |
+| **GPIO18** | Fingerprint RST | Sleep/wake control (output) |
+| **GPIO8** | Fingerprint WAKE | Finger detect (input, interrupt) |
 | **GPIO38** | UART1 RX | Fingerprint TX (U1RXD) |
 | **GPIO39** | UART1 TX | Fingerprint RX (U1TXD) |
 
-**❌ Unavailable:** GPIO7 (doesn't exist), GPIO21/33 (onboard NeoPixel)
+**❌ Unavailable:** GPIO7 (reserved for I2C power, not on header), GPIO21/33 (onboard NeoPixel)
+
+
+### Pin Reference Table
+
+| Arduino Label | GPIO | Notes |
+|---------------|------|-------|
+| SDA | 3 | I²C Data (STEMMA QT) |
+| SCL | 4 | I²C Clock (STEMMA QT) |
+| A0 | 18 | Analog / Digital |
+| A1 | 17 | Analog / Digital |
+| A2 | 16 | Analog / Digital |
+| A3 | 15 | Analog / Digital |
+| A4 | 14 | Analog / Digital |
+| A5 | 8 | Analog / Digital |
+| D5 | 5 | Digital |
+| D6 | 6 | Digital |
+| D9 | 9 | Digital |
+| D10 | 10 | Digital |
+| D11 | 11 | Digital |
+| D12 | 12 | Digital |
+| D13 | 13 | Digital |
+| **RX** | **38** | UART1 RX (U1RXD) |
+| **TX** | **39** | UART1 TX (U1TXD) |
+| NEOPIXEL | 33 | Onboard RGB LED |
+| NEOPIXEL_POWER | 21 | Onboard NeoPixel enable |
 
 ---
 
 ## 📋 Table of Contents
 
-1. [System Overview](#system-overview)
-2. [Power Distribution](#power-distribution)
-3. [Component Connections](#component-connections)
-4. [Key Matrix Wiring](#key-matrix-wiring)
-5. [RGB LED Strip with Level Shifter](#rgb-led-strip-with-level-shifter)
-6. [Complete Pin Assignment Table](#complete-pin-assignment-table)
-7. [Physical Layout](#physical-layout)
-8. [Breadboard Prototype Diagram](#breadboard-prototype-diagram)
-9. [Testing Checklist](#testing-checklist)
+1. [Adafruit ESP32-S3 Feather Pinout Reference](#adafruit-esp32-s3-feather-pinout-reference)
+2. [System Overview](#system-overview)
+3. [Power Distribution](#power-distribution)
+4. [Component Connections](#component-connections)
+5. [Key Matrix Wiring](#key-matrix-wiring)
+6. [RGB LED Strip with Level Shifter](#rgb-led-strip-with-level-shifter)
+7. [Complete Pin Assignment Table](#complete-pin-assignment-table)
+8. [Physical Layout](#physical-layout)
+9. [Breadboard Prototype Diagram](#breadboard-prototype-diagram)
+10. [Testing Checklist](#testing-checklist)
 
 ---
 
@@ -74,6 +102,7 @@
 │   │ Round  │       │  │   │ │    │  │                 │          │
 │   │Finger  │       │  │   │ │    │  │                 │          │
 │   │print   │       │  │   │ │    │  │                 │          │
+│   │RST/WAKE│       │  │   │ │    │  │                 │          │
 │   └────────┘       ▼  ▼   ▼ ▼    ▼  ▼                 ▼          │
 │  (Capacitive)  ┌─────┐ ┌────┐ ┌──────┐      ┌──────────────┐    │
 │                │OLED │ │ATECC│ │12 Keys│      │ Level Shifter│    │
@@ -106,7 +135,7 @@
 │                  ESP32-S3 Feather               │              │
 │                                                 │              │
 │   ┌─────────────────────────────────────┐      │              │
-│   │  3.3V Regulator (AMS1117 - 500mA)   │      │              │
+│   │  3.3V Regulator (AP2112K - 500mA)    │      │              │
 │   │  5V IN ──────────► 3.3V OUT         │      │              │
 │   └─────────────────────────────────────┘      │              │
 │                         │                       │              │
@@ -122,8 +151,9 @@
             │  Sensor  │      │ Display │  │ 608A    │   │   @ 5V     │
             │  @ 3.3V  │      │ @ 3.3V  │  │ @ 3.3V  │   │  (5 LEDs)  │
             └──────────┘      └─────────┘  └─────────┘   └──────────┘
-              ~50-120mA          ~20mA         <1mA         ~720mA max
-                                                           (60mA × 12)
+            ~1-5mA sleep         ~20mA         <1mA         ~300mA max
+            ~50-120mA active                                (60mA × 5)
+            (RST pin controlled)
 ```
 
 ### Power Budget
@@ -132,23 +162,24 @@
 |-----------|---------|-------------------|---------------|
 | ESP32-S3 Feather | 3.3V | 80-150mA | 240mA |
 | OLED Display | 3.3V | 15mA | 20mA |
-| Fingerprint Sensor | 3.3V | 50mA idle | 120mA scanning |
+| Fingerprint Sensor | 3.3V | ~3mA sleep | 120mA scanning |
 | ATECC608A | 3.3V | <1mA | <1mA |
 | 1× Rotary Encoder  | 3.3V | <1mA | <1mA |
-| **WS2812B LEDs (12×)** | **5V** | **180mA (25%)** | **720mA (100%)** |
-| **Total from USB 5V** | — | **~400mA** | **~1100mA** |
+| **WS2812B LEDs (5×)** | **5V** | **75mA (25%)** | **300mA (100%)** |
+| **Total from USB 5V** | — | **~245mA** | **~680mA** |
 
 **Note:** 
 - 3.3V components draw from onboard regulator (max 500mA) ✅
 - WS2812B draws directly from 5V USB (bypasses regulator) ✅
-- Typical usage: LEDs at 25% brightness = ~400mA total
-- USB 2.0 provides up to 500mA (standard) or 900mA (high-power)
+- Typical usage: fingerprint sleeping + LEDs at 25% = ~245mA total ✅ USB 2.0 safe
+- During FIDO2 auth (fingerprint active): ~290mA typical (still well within budget)
+- USB 2.0 provides up to 500mA; USB 3.x provides up to 900mA
 
 ---
 
 ## 🔌 Component Connections
 
-### 1. Waveshare Round Capacitive Fingerprint Sensor (UART)
+### 1. Waveshare Round Capacitive Fingerprint Sensor (UART + RST/WAKE)
 
 ```
 ┌───────────────────────────────────────────────────────┐
@@ -184,26 +215,63 @@ Wiring to ESP32-S3 Feather (UART1 - crossover TX/RX):
 │ Pin 2: GND      │ Black        │ GND                   │
 │ Pin 3: TX       │ Green        │ GPIO38 (U1RXD)        │
 │ Pin 4: RX       │ Yellow       │ GPIO39 (U1TXD)        │
-│ Pin 5: RST      │ Blue         │ Not connected*        │
-│ Pin 6: WAKE     │ White        │ Not connected*        │
+│ Pin 5: RST      │ Blue         │ GPIO18 (A0) - Output  │
+│ Pin 6: WAKE     │ White        │ GPIO8  (A5) - Input   │
 └─────────────────┴──────────────┴───────────────────────┘
-
-* RST/WAKE are optional. For FIDO2 sleep mode integration:
-  - RST:  Connect to GPIO → LOW=sleep, HIGH=active
-  - WAKE: Connect to GPIO → goes HIGH when finger touches sensor
 
 Baud Rate: 19200 (Waveshare default)
 Protocol: Custom packet (0xF5 header/tail, XOR checksum)
 IMPORTANT: TX → RX, RX → TX (crossover connection)
+
+Sleep/Wake Power Management:
+┌─────────────────────────────────────────────────────────┐
+│  The fingerprint sensor stays in SLEEP MODE by default  │
+│  and only wakes for registration or FIDO2 auth.         │
+│                                                          │
+│  RST Pin (GPIO18 → Sensor Pin 5):                       │
+│  - ESP32 OUTPUT: controls sensor power state             │
+│  - LOW  = sensor in sleep/standby (~1-5mA)              │
+│  - HIGH = sensor active and ready (~50-120mA)            │
+│  - On boot: set GPIO18 LOW (keep sensor sleeping)        │
+│  - Wake sequence: set HIGH → wait 200ms → send command   │
+│  - Sleep sequence: send sleep cmd → set LOW              │
+│                                                          │
+│  WAKE Pin (GPIO8 → Sensor Pin 6):                        │
+│  - ESP32 INPUT with INTERRUPT: finger detect signal      │
+│  - Sensor pulls HIGH when a finger touches the surface   │
+│  - Use as hardware interrupt (RISING edge) to notify     │
+│    ESP32 that a finger is present                        │
+│  - Allows the ESP32 to react without polling             │
+│                                                          │
+│  Typical Flow:                                           │
+│   1. Sensor sleeps (RST=LOW), ESP32 running normally     │
+│   2. User triggers FIDO2 auth (browser passkey prompt)   │
+│   3. ESP32 wakes sensor (RST=HIGH), waits 200ms         │
+│   4. OLED shows "Place finger on sensor"                 │
+│   5. WAKE pin goes HIGH → interrupt fires                │
+│   6. ESP32 captures + verifies fingerprint via UART      │
+│   7. On success: sign FIDO2 assertion, send to browser   │
+│   8. ESP32 puts sensor back to sleep (RST=LOW)           │
+│                                                          │
+│  Power Savings:                                          │
+│   - Active scanning: ~50-120mA (only during auth)        │
+│   - Sleep mode: ~1-5mA (idle most of the time)           │
+│   - Reduces avg current by ~50-115mA                     │
+│                                                          │
+│  Firmware Configuration:                                 │
+│   - GPIO18: pinMode(18, OUTPUT); digitalWrite(18, LOW);  │
+│   - GPIO8:  pinMode(8, INPUT);                           │
+│             attachInterrupt(8, onFingerDetect, RISING);  │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### 2. OLED Display 0.96" 128×64 (I²C)
+### 2. OLED Display 1.3" 128×64 (I²C)
 
 ```
 ┌───────────────────────────────────────────────────────┐
-│  SSD1306 OLED Display - 0.96 inch                     │
+│  SH1106 OLED Display - 1.3 inch                        │
 │  128×64 pixels - I²C Interface                        │
 ├───────────────────────────────────────────────────────┤
 │                                                        │
@@ -414,7 +482,7 @@ Each key needs a diode to prevent ghosting:
        Row Pin (GPIO5/6/9)
             │
             │
-            ├─────► Anode │├──── Cathode (1N4148)
+            ├─────► Cathode ││◄──── Anode (1N4148)
                                     │
                                     │
                               ┌─────┴─────┐
@@ -429,12 +497,13 @@ Each key needs a diode to prevent ghosting:
                                 Column Pin (GPIO13/14/15/16)
 
 Key 1 Example:
-  GPIO5 ──→ 1N4148 ──→│├──→ [Switch] ──→ GPIO13
+  GPIO5 ──← Cathode │├ Anode ←── [Switch] ──→ GPIO13
 
 IMPORTANT: 
-- Diode cathode (line/band) goes to switch
-- Diode anode connects to row pin
+- Diode cathode (line/band) connects to row pin
+- Diode anode connects to switch
 - Switch other terminal connects to column pin
+- Current flows: Column(HIGH) → Switch → Anode → Cathode → Row(LOW)
 ```
 
 ### Complete Matrix Wiring Table
@@ -477,11 +546,12 @@ ESP32-S3 Feather Pin → Function
 Diode Placement:
 ┌───────────────────────────────────────┐
 │  Each 1N4148 Diode:                   │
-│  - Black band = Cathode → Switch      │
-│  - Other end = Anode → Row pin        │
+│  - Black band = Cathode → Row pin     │
+│  - Other end = Anode → Switch         │
 │                                       │
-│  Prevents current backflow that       │
-│  causes "ghosting" (false keypresses) │
+│  For COL2ROW scanning, current flows: │
+│  Col(HIGH)→Switch→Anode→Cathode→Row   │
+│  Prevents ghosting (false keypresses) │
 └───────────────────────────────────────┘
 ```
 
@@ -498,94 +568,72 @@ Problem:
 - 3.3V may work but is unreliable (signal integrity issues)
 
 Solution:
-- Use level shifter to convert 3.3V → 5V logic
-- Or use a single MOSFET as level shifter (simpler)
+- Use SN74AHCT1G125 single buffer IC (TTL-compatible input, 5V output)
+- Powered at 5V, accepts 3.3V as valid HIGH (VIH min = 2.0V)
+- Clean push-pull 5V output, no external pull-up resistors needed
 ```
 
-### Option 1: MOSFET Level Shifter (Recommended - Simple & Cheap)
+### SN74AHCT1G125 Level Shifter (Single Buffer IC)
 
 ```
 Circuit Diagram:
 
-         3.3V (from ESP32-S3)      5V (from USB VBUS)
-           │                           │
-           │                           │
-          [4.7kΩ]                     ┌┴┐ 10kΩ Pull-up
-           │                          │ │ (to 5V rail)
-           │                          └┬┘
-           │                           │
-ESP32-S3   │                           │      To WS2812B
-GPIO17 ────┴────┐                      │        Data In
-                │                      │           │
-                │     ┌────────┐       │           │
-                └─────┤G     D ├───────┴───────────┘
-                      │        │
-                      │ 2N7000 │  ← N-Channel MOSFET
-                      │  or    │     (or BSS138)
-                      │ BSS138 │
-                      │        │
-                      └───┬────┘
-                          │S
-                          │
-                         GND
+  ESP32-S3                SN74AHCT1G125               WS2812B
+  GPIO17 ────────────────→ A (pin 2)                  LED Strip
+  (3.3V logic)            │                           │
+                          │  ┌──────────────┐         │
+                     OE ──┤1 │              │ 4├──────┘ DIN
+                     (GND) │  │ 74AHCT1G125 │  │     (5V logic)
+                     A  ──┤2 │  Buffer IC   │  │
+                          │  │              │  │
+                    GND ──┤3 │              │ 5├── VCC (5V)
+                          │  └──────────────┘  │
+                          │                    │
+                         GND                  5V
+
+SN74AHCT1G125 Pinout (SOT-23-5 SMD):
+Top view, dot/pin 1 at top-left:
+     ┌──────────┐
+ OE ─┤1        5├─ VCC
+     │          │
+  A ─┤2        4├─ Y
+     │          │
+GND ─┤3         │
+     └──────────┘
 
 Components Needed:
-┌────────────────────┬──────────┬────────────────┐
-│ Component          │ Quantity │ Value/Type     │
-├────────────────────┼──────────┼────────────────┤
-│ N-Channel MOSFET   │ 1        │ 2N7000/BSS138  │
-│ Resistor (Pull-up) │ 1        │ 10kΩ           │
-│ Resistor (Gate)    │ 1        │ 4.7kΩ (opt)    │
-└────────────────────┴──────────┴────────────────┘
+┌──────────────────────┬──────────┬──────────────────────────────────┐
+│ Component            │ Quantity │ Value/Type                       │
+├──────────────────────┼──────────┼──────────────────────────────────┤
+│ Buffer IC            │ 1        │ SN74AHCT1G125DBVR (SOT-23-5)    │
+└──────────────────────┴──────────┴──────────────────────────────────┘
+No external resistors required.
 
 Wiring Table:
-┌─────────────────────┬───────────────────────────┐
-│ Connection          │ Wire To                   │
-├─────────────────────┼───────────────────────────┤
-│ ESP32-S3 GPIO17     │ MOSFET Gate (G)           │
-│ MOSFET Drain (D)    │ WS2812B Data In + 10kΩ→5V │
-│ MOSFET Source (S)   │ GND                       │
-│ 10kΩ Resistor       │ Between Drain and 5V      │
-└─────────────────────┴───────────────────────────┘
+┌──────────────────────────┬────────────────────────────────────────┐
+│ SN74AHCT1G125 Pin        │ Connect To                             │
+├──────────────────────────┼────────────────────────────────────────┤
+│ Pin 1: OE (Output Enable)│ GND (always enabled, active LOW)       │
+│ Pin 2: A (Input)         │ ESP32-S3 GPIO17 (3.3V data signal)     │
+│ Pin 3: GND               │ GND (common ground)                    │
+│ Pin 4: Y (Output)        │ WS2812B LED1-DI (5V data signal)      │
+│ Pin 5: VCC               │ 5V (USB VBUS)                          │
+└──────────────────────────┴────────────────────────────────────────┘
 
 How it works:
-- When GPIO17 = HIGH (3.3V): MOSFET ON → Drain pulled LOW → WS2812B sees LOW
-- When GPIO17 = LOW (0V):    MOSFET OFF → Pull-up pulls Drain HIGH (5V) → WS2812B sees HIGH
-- Signal is inverted, but firmware can compensate
-```
+- IC is powered at 5V, making output swing 0–5V (full logic levels)
+- AHCT family uses TTL-compatible inputs: VIH min = 2.0V, VIL max = 0.8V
+- ESP32 3.3V output is well above 2.0V threshold → clean HIGH detection
+- Output is push-pull (sources AND sinks current) → fast, clean edges
+- No pull-up resistors needed (unlike MOSFET approach)
+- OE tied to GND = output always enabled
+- Propagation delay: ~6ns max (far faster than WS2812B timing needs)
 
-### Option 2: Dedicated Level Shifter IC (More Reliable)
-
-```
-Circuit Diagram:
-
-┌────────────────────────────────────────────────────┐
-│       74AHCT125 or 74HCT245 Level Shifter          │
-│                                                    │
-│   VCC ──── 5V (from USB VBUS)                     │
-│   GND ──── GND                                     │
-│                                                    │
-│   LV Side (3.3V)          HV Side (5V)            │
-│        │                       │                   │
-│   ESP32-S3 GPIO33 ──→ [IC] ──→ WS2812B Data In   │
-│                                                    │
-└────────────────────────────────────────────────────┘
-
-Recommended ICs:
-- 74AHCT125: Quad buffer (can do 4 signals)
-- 74HCT245: Octal bus transceiver
-- SN74LVC1G17: Single buffer (cheapest)
-
-Wiring for 74AHCT125:
-┌─────────────────┬──────────────┬─────────────────┐
-│ 74AHCT125 Pin   │ Connect To   │ Function        │
-├─────────────────┼──────────────┼─────────────────┤
-│ VCC (Pin 14)    │ 5V (USB)     │ Power           │
-│ GND (Pin 7)     │ GND          │ Ground          │
-│ 1A (Pin 1)      │ GPIO17       │ Input (3.3V)    │
-│ 1Y (Pin 2)      │ WS2812B DIN  │ Output (5V)     │
-│ 1OE (Pin 3)     │ GND          │ Enable (active) │
-└─────────────────┴──────────────┴─────────────────┘
+Advantages over BSS138 MOSFET approach:
+- Simpler circuit: single IC, no external resistors
+- Faster edges: push-pull output vs. passive pull-up
+- No RC rise time concerns (MOSFET + pull-up has slow rising edges)
+- No boot glitch worries (output is high-impedance until VCC is stable)
 ```
 
 ### WS2812B LED Strip Connection
@@ -631,49 +679,49 @@ Power Calculation:
 - 5 LEDs × 15mA = 75mA @ 25% brightness ✅
 
 Data Signal Path:
-  ESP32-S3 GPIO17 (3.3V) 
+  ESP32-S3 GPIO17 (3.3V logic)
        │
        ▼
-  Level Shifter (MOSFET or IC)
+  SN74AHCT1G125 Pin 2 (A input, TTL-compatible)
        │
        ▼
-  WS2812B DIN (5V logic)
+  SN74AHCT1G125 Pin 4 (Y output, 5V logic)
        │
        ▼
-  LED 1 → LED 2 → LED 3 → LED 4 → LED 5
+  WS2812B DIN → LED 1 → LED 2 → LED 3 → LED 4 → LED 5
 ```
 
 ### Recommended Level Shifter Breadboard Layout
 
 ```
-Breadboard Layout (MOSFET Method):
+Breadboard Layout (SN74AHCT1G125):
 
-Row 1:  5V ──────[10kΩ]────── to Row 5 (Pull-up)
-Row 2:  (empty)
-Row 3:  GPIO17 ────────────── to MOSFET Gate
-Row 4:  (empty)
-Row 5:  MOSFET Drain ──────── to WS2812B DIN + 10kΩ from Row 1
-Row 6:  (empty)
-Row 7:  MOSFET Source ─────── to GND
-Row 8:  GND Rail
+Row 1:  GND ──────────────────── to Pin 1 (OE) + Pin 3 (GND)
+Row 2:  GPIO17 from ESP32-S3 ─── to Pin 2 (A input)
+Row 3:  (empty)
+Row 4:  Pin 4 (Y output) ─────── to WS2812B LED1-DIN
+Row 5:  5V (from VBUS) ────────── to Pin 5 (VCC)
 
-2N7000 Pinout (TO-92 package):
-Looking at flat side:
-┌───────────┐
-│ ○   ○   ○ │
-│ │   │   │ │
-│ S   G   D │
-└───────────┘
+SN74AHCT1G125 Pinout (SOT-23-5 package):
+Top view, dot at pin 1:
+     ┌──────────┐
+ OE ─┤1        5├─ VCC
+     │          │
+  A ─┤2        4├─ Y
+     │          │
+GND ─┤3         │
+     └──────────┘
+
+Note: SOT-23-5 is SMD. For breadboard prototyping,
+use a SOT-23-5 breakout board or solder wires directly.
+Only 5 wires needed — no external resistors.
 ```
 
 ---
 
 ## 📊 Complete Pin Assignment Table
 
-> **⚠️ NOTE:** This table below contains OLD/OUTDATED pin assignments for reference.  
-> **✅ USE THE "QUICK PIN REFERENCE" AT THE TOP** for the correct, final pin assignments.
-
-### ESP32-S3 Feather GPIO Allocation (LEGACY - DO NOT USE)
+### ESP32-S3 Feather GPIO Allocation (ACTIVE)
 
 | ESP32-S3 Pin | Function | Component | Direction | Notes |
 |--------------|----------|-----------|-----------|-------|
@@ -681,36 +729,33 @@ Looking at flat side:
 | **3V** | Power Out | All 3.3V components | Output | 500mA max from regulator |
 | **GND** | Ground | Common ground | — | All components share |
 | **VBUS** | 5V In | USB power | Input | Powers Feather + LEDs |
-| **BAT** | Battery | Optional LiPo | Input | For portable use |
-| **GPIO1** | Key Matrix | Row 0 (Keys 1-4) | Output | Active low scanning |
-| **GPIO2** | Key Matrix | Row 1 (Keys 5-8) | Output | Active low scanning |
-| **GPIO3** | Key Matrix | Row 2 (Keys 9-12) | Output | Active low scanning |
-| **GPIO5** | Encoder | Rotary 1 CLK (Vol) | Input | Internal pull-up |
-| **GPIO6** | Encoder | Rotary 1 DT (Vol) | Input | Internal pull-up |
-| **GPIO7** | Key Matrix | Col 0 (Keys 1,5,9) | Input | Internal pull-up |
-| **GPIO8** | Key Matrix | Col 1 (Keys 2,6,10) | Input | Internal pull-up |
-| **GPIO9** | Encoder | Rotary 1 SW (Vol) | Input | Internal pull-up |
-| **GPIO10** | Key Matrix | Col 2 (Keys 3,7,11) | Input | Internal pull-up |
-| **GPIO11** | Encoder | Rotary 2 CLK (Scroll) | Input | Internal pull-up |
-| **GPIO12** | Encoder | Rotary 2 DT (Scroll) | Input | Internal pull-up |
-| **GPIO13** | Encoder | Rotary 2 SW (Scroll) | Input | Internal pull-up |
-| **GPIO14** | Key Matrix | Col 3 (Keys 4,8,12) | Input | Internal pull-up |
-| **GPIO17** | UART TX | Fingerprint RX | Output | 9600 baud default |
-| **GPIO18** | UART RX | Fingerprint TX | Input | 9600 baud default |
-| **GPIO33** | RMT | WS2812B LEDs (via shifter) | Output | 800kHz PWM |
-| **SDA** | I²C Data | OLED + ATECC608A | Bidir | Shared bus, 100kHz |
-| **SCL** | I²C Clock | OLED + ATECC608A | Output | Shared bus, 100kHz |
-| **STEMMA QT** | I²C | Alternative OLED connection | Bidir | Same as SDA/SCL |
+| **GPIO3 (SDA)** | I²C Data | OLED + ATECC608A | Bidir | Shared bus, 100kHz |
+| **GPIO4 (SCL)** | I²C Clock | OLED + ATECC608A | Output | Shared bus, 100kHz |
+| **GPIO5** | Key Matrix | Row 0 (Keys 1-4) | Output | Active low scanning |
+| **GPIO6** | Key Matrix | Row 1 (Keys 5-8) | Output | Active low scanning |
+| **GPIO8 (A5)** | Fingerprint | WAKE (finger detect) | Input | Interrupt on RISING |
+| **GPIO9** | Key Matrix | Row 2 (Keys 9-12) | Output | Active low scanning |
+| **GPIO10** | Encoder | CLK (rotation) | Input | Internal pull-up |
+| **GPIO11** | Encoder | DT (direction) | Input | Internal pull-up |
+| **GPIO12** | Encoder | SW (mute button) | Input | Internal pull-up |
+| **GPIO13** | Key Matrix | Col 0 (Keys 1,5,9) | Input | Internal pull-up |
+| **GPIO14 (A4)** | Key Matrix | Col 1 (Keys 2,6,10) | Input | Internal pull-up |
+| **GPIO15 (A3)** | Key Matrix | Col 2 (Keys 3,7,11) | Input | Internal pull-up |
+| **GPIO16 (A2)** | Key Matrix | Col 3 (Keys 4,8,12) | Input | Internal pull-up |
+| **GPIO17 (A1)** | LED Data | WS2812B (via shifter) | Output | 800kHz RMT |
+| **GPIO18 (A0)** | Fingerprint | RST (sleep/wake) | Output | LOW=sleep, HIGH=active |
+| **GPIO38 (RX)** | UART1 RX | Fingerprint TX | Input | 19200 baud |
+| **GPIO39 (TX)** | UART1 TX | Fingerprint RX | Output | 19200 baud |
 
 **GPIO Usage Summary:**
-- **Used:** 15 GPIO pins + I²C (GPIO3/4) + USB = 17 functions
-- **Available:** 21+ GPIO pins on ESP32-S3 Feather
-- **Remaining:** 6+ spare GPIO for expansion ✅
+- **Used:** 17 GPIO pins + USB = 18 functions
+- **Available:** SPI pins (GPIO35/36/37), BAT, plus spare GPIOs
+- **Remaining:** 4+ spare GPIO for expansion ✅
 
 **Reserved/Unavailable Pins:**
-- ❌ **GPIO7** - Not available on ESP32-S3 Feather
-- ❌ **GPIO21** - Onboard NeoPixel (reserved by board)
-- ❌ **GPIO33** - Onboard NeoPixel (reserved by board)
+- ❌ **GPIO7** - Reserved for I2C power (STEMMA QT), not on header
+- ❌ **GPIO21** - Onboard NeoPixel power (reserved by board)
+- ❌ **GPIO33** - Onboard NeoPixel data (reserved by board)
 
 ---
 
@@ -748,8 +793,8 @@ Looking at flat side:
 │  Sensor   │Cur│ │Ins│ │Trm│ │Git│                              │
 │  (Round)  └───┘ └───┘ └───┘ └───┘                              │
 │ GPIO38/39   ▲                   ▲                                │
-│             │                   └─ Double-tap to switch OS       │
-│             └───── 3×4 Key Matrix (GPIO 5/6/9 rows)             │
+│ GPIO18/8    │                   └─ Double-tap to switch OS       │
+│ (RST/WAKE)  └───── 3×4 Key Matrix (GPIO 5/6/9 rows)             │
 │                                   (GPIO 13/14/15/16 cols)        │
 │                                                                   │
 │  [● ● ● ● ●] ← 5× WS2812B Underglow LEDs (GPIO17)              │
@@ -762,8 +807,9 @@ Looking at flat side:
 │                                                                   │
 │  Hidden underneath:                                              │
 │  - ATECC608A (I²C @ 0x60, GPIO3/4)                              │
-│  - Level Shifter (SN74AHCT1G125)                                │
+│  - Level Shifter (SN74AHCT1G125 buffer IC)                      │
 │  - 1N4148 Diodes (12×)                                          │
+│  - 220uF bulk caps (3.3V + 5V rails)                            │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 
@@ -773,7 +819,7 @@ Dimensions (Approximate):
 - OLED: 1.3" diagonal (128×64 pixels)
 - Fingerprint: 25mm diameter (round capacitive)
 - Encoder: 12mm diameter knob
-- LED strip: 5× WS2812B-2020 (mini LEDs)
+- LED strip: 5× WS2812B-2020 (2mm mini SMD LEDs)
 ```
 
 ### Side View - Layer Stack
@@ -821,7 +867,7 @@ Dimensions (Approximate):
 │  │                                                          │   │
 │  ├─────────────────────────────────────────────────────────┤   │
 │  │                                                          │   │
-│  │  [OLED] [Fingerprint] [ATECC608A] [2×Encoders]         │   │
+│  │  [OLED] [Fingerprint] [ATECC608A] [Encoder]            │   │
 │  │  (Connected via jumper wires to Feather)                │   │
 │  │                                                          │   │
 │  ├─────────────────────────────────────────────────────────┤   │
@@ -834,8 +880,8 @@ Dimensions (Approximate):
 │  ├─────────────────────────────────────────────────────────┤   │
 │  │                                                          │   │
 │  │  [Level Shifter Circuit]                                │   │
-│  │  - MOSFET or IC                                         │   │
-│  │  - Pull-up resistor                                     │   │
+│  │  - SN74AHCT1G125 (SOT-23-5 on breakout board)          │   │
+│  │  - No external resistors needed                         │   │
 │  │                                                          │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
@@ -896,7 +942,7 @@ Component Placement Tips:
 ```
 □ Step 4: OLED Display
   □ Connect OLED (I²C or STEMMA QT)
-  □ Upload Adafruit SSD1306 test sketch
+  □ Upload Adafruit SH1106 test sketch
   □ Display shows test pattern
   □ Can display text clearly ✅
 
@@ -908,11 +954,16 @@ Component Placement Tips:
 
 □ Step 6: Fingerprint Sensor
   □ Connect to UART (TX↔RX, RX↔TX)
+  □ Connect RST (GPIO18) and WAKE (GPIO8)
   □ Power with 3.3V (check current)
   □ Upload fingerprint test sketch
+  □ Verify sleep mode: set GPIO18 LOW, measure ~1-5mA
+  □ Verify wake: set GPIO18 HIGH, wait 200ms, sensor responds
+  □ Verify WAKE interrupt: touch sensor → GPIO8 goes HIGH
   □ Blue LED lights up when touched
   □ Can enroll test fingerprint
-  □ Can verify enrolled fingerprint ✅
+  □ Can verify enrolled fingerprint
+  □ Sensor returns to sleep after auth ✅
 
 □ Step 7: Rotary Encoder (Volume)
   □ Connect Encoder (CLK→GPIO10, DT→GPIO11, SW→GPIO12)
@@ -930,11 +981,11 @@ Component Placement Tips:
   □ Test multiple simultaneous keys (no ghosting) ✅
 
 □ Step 9: RGB LED Strip (WITH Level Shifter)
-  □ Build level shifter circuit
+  □ Wire SN74AHCT1G125: OE+GND→GND, A→GPIO17, Y→LED1-DIN, VCC→5V
   □ Connect LED strip to 5V (NOT 3.3V!)
-  □ Connect data line through level shifter
+  □ Connect data line through level shifter (pin 4 Y output)
   □ Upload FastLED or NeoPixel test
-  □ All 12 LEDs light up
+  □ All 5 LEDs light up
   □ Can change colors individually
   □ Limit brightness to 25% max ✅
 ```
@@ -959,14 +1010,14 @@ Component Placement Tips:
 □ Step 12: Macro Keyboard Functions
   □ Upload macro key assignments
   □ Press keys → correct shortcuts sent
-  □ Rotary encoders control volume
+  □ Rotary encoder controls volume
   □ RGB LEDs show status correctly ✅
 
 □ Step 13: Final System Test (on macOS)
   □ Visit GitHub.com → create passkey
   □ Logout → login with fingerprint
   □ Use macro keys for productivity
-  □ Adjust volume with encoder
+  □ Adjust volume with rotary encoder
   □ Verify OLED shows all info correctly
   □ 🎉 SUCCESS! Fully functional! 🎉
 ```
@@ -988,7 +1039,7 @@ Component Placement Tips:
 | **Ghost key presses** | Missing diode | Install 1N4148 on every key |
 | **Encoder erratic** | No pull-ups | Enable internal pull-ups in code |
 | **LEDs don't light** | Wrong voltage | Verify 5V power, not 3.3V |
-| **LEDs wrong colors** | No level shifter | Build MOSFET level shifter |
+| **LEDs wrong colors** | No level shifter | Wire SN74AHCT1G125 buffer IC |
 | **LEDs flicker** | Insufficient power | Limit brightness to 25% |
 | **FIDO2 not detected** | Wrong USB mode | Ensure native USB OTG enabled |
 | **Passkey fails** | Fingerprint timeout | Increase verification timeout |
@@ -1004,16 +1055,16 @@ Component Placement Tips:
 | **Main Board** | ESP32-S3 Feather | 1 | From Robu.in |
 | **Security** | ATECC608A breakout | 1 | I²C crypto chip |
 | **Biometric** | Waveshare Round Fingerprint | 1 | Capacitive, 360° |
-| **Display** | SSD1306 OLED 0.96" | 1 | I²C interface |
+| **Display** | SH1106 OLED 1.3" | 1 | I²C interface |
 | **Input** | Cherry MX switches | 12 | Or compatible |
-| **Input** | EC11 Rotary encoders | 2 | With push button |
-| **LEDs** | WS2812B 5050 RGB | 12 | Addressable |
-| **Diodes** | 1N4148 (SOD-123) | 12 | For key matrix |
-| **Level Shift** | 2N7000 N-MOSFET | 1 | Or BSS138 |
-| **Resistors** | 10kΩ (0805 or 1/4W) | 1 | Pull-up for MOSFET |
+| **Input** | EC11 Rotary encoder module | 1 | With push button |
+| **LEDs** | WS2812B-2020 RGB | 5 | Addressable, 2mm mini |
+| **Diodes** | 1N4148 (DO-35) | 12 | For key matrix |
+| **Level Shift** | SN74AHCT1G125DBVR | 1 | SOT-23-5 buffer IC (TI), LCSC: C7484 |
+| **Capacitors** | 220uF/16V Electrolytic | 2 | Bulk decoupling (3.3V + 5V rails) |
 | **Resistors** | 4.7kΩ (optional) | 2 | I²C pull-ups (if needed) |
 | **Keycaps** | DSA or Cherry profile | 12 | 1U size |
-| **Knobs** | 6mm D-shaft knobs | 2 | For encoders |
+| **Knobs** | 6mm D-shaft knob | 1 | For encoder |
 | **Cables** | JST-SH STEMMA QT | 1-2 | For OLED connection |
 | **Wires** | Jumper wires M-F | 40 pack | For prototyping |
 | **Prototyping** | Full-size breadboard | 1-2 | For testing |
@@ -1029,12 +1080,12 @@ Component Placement Tips:
 | OLED Display | ₹200-300 |
 | ATECC608A | ₹300-500 |
 | 12× Switches | ₹600-1,200 |
-| 2× Encoders | ₹200-400 |
-| 12× LEDs | ₹150-300 |
+| 1× Encoder module | ₹100-200 |
+| 5× WS2812B-2020 LEDs | ₹75-150 |
 | Keycaps | ₹300-500 |
-| Electronics (diodes, resistors, etc) | ₹200-300 |
+| Electronics (diodes, resistors, caps, etc) | ₹200-300 |
 | Cables & Prototyping | ₹300-500 |
-| **TOTAL** | **₹6,750-9,500** |
+| **TOTAL** | **₹6,275-8,650** |
 
 ---
 
@@ -1043,14 +1094,15 @@ Component Placement Tips:
 ### Important Reminders
 
 1. **UART Crossover:** Fingerprint TX → ESP32 RX, Fingerprint RX → ESP32 TX
-2. **Diode Orientation:** Band (cathode) toward switch, anode toward row
+2. **Diode Orientation:** Band (cathode) toward row pin, anode toward switch
 3. **LED Power:** WS2812B on 5V rail, NOT 3.3V
-4. **Level Shifter:** Required for reliable WS2812B operation
+4. **Level Shifter:** SN74AHCT1G125 required for reliable WS2812B operation
 5. **I²C Addresses:** OLED (0x3C), ATECC608A (0x60) - no conflicts
 6. **Pull-ups:** Enable internal pull-ups for encoders and key columns
 7. **Current Limit:** Keep LED brightness at 25% to stay under USB power budget
 8. **Testing:** Test each component individually before full integration
 9. **FIDO2:** Requires native USB OTG - confirmed working on ESP32-S3 Feather
+10. **Fingerprint Sleep:** Sensor defaults to sleep (RST=LOW). Wake only for auth/enroll (RST=HIGH). Use WAKE interrupt (GPIO8) for finger detection.
 
 ### Best Practices
 
@@ -1064,10 +1116,77 @@ Component Placement Tips:
 
 ---
 
+## ⚠️ Hardware Circuit Design Notes
+
+### Level Shifter Design (SN74AHCT1G125 Buffer IC)
+
+The level shifter uses a TI SN74AHCT1G125DBVR single buffer gate (SOT-23-5).
+No external resistors are required.
+
+1. **Input compatibility:** The AHCT family uses TTL-compatible input thresholds when
+   powered at 5V: VIH min = 2.0V, VIL max = 0.8V. The ESP32-S3 outputs 3.3V for HIGH,
+   providing 1.3V margin above the minimum HIGH threshold.
+
+2. **Output drive:** The IC provides push-pull output capable of ±8mA at 5V. This
+   produces fast, clean edges without the RC rise time limitations of a MOSFET + pull-up
+   approach. Propagation delay is ~6ns max, well within WS2812B timing requirements.
+
+3. **Power-on behavior:** With OE tied to GND, the output follows the input as soon as
+   VCC is stable. During ESP32 boot (GPIO17 floating/low), the IC output stays LOW,
+   which is a valid idle state for WS2812B (no random LED flashing).
+
+### Power Distribution Notes
+
+1. **3.3V regulator budget:** ESP32-S3 (~150mA) + OLED (~20mA) + Fingerprint (~120mA peak active, ~3mA sleep)
+   + ATECC608A (<1mA) = ~291mA peak from the 500mA onboard regulator (AP2112K). Safe margin. ✅
+   With fingerprint in sleep mode (default): ~174mA typical, leaving ample headroom.
+
+2. **5V USB budget:** ESP32 board overhead (~170mA typical with fingerprint sleeping, ~300mA worst case) +
+   5× WS2812B (300mA max / 75mA at 25%) = ~245–600mA total. At 25% LED brightness
+   with fingerprint sleeping, this stays well within USB 2.0's 500mA allocation. ✅
+   Full LED brightness exceeds USB 2.0 spec — **always limit to ≤50% brightness in firmware**.
+
+3. **Bulk capacitors (C1, C2):** The two 220uF/16V electrolytic capacitors provide bulk
+   decoupling on 3.3V and 5V rails. These smooth out current spikes from the fingerprint
+   sensor (pulsed IR LED) and WS2812B (simultaneous switching). Observe correct polarity
+   (positive terminal to VCC, negative to GND).
+
+### I²C Bus Considerations
+
+1. **Multiple pull-ups:** The Adafruit ESP32-S3 Feather has built-in I²C pull-ups on the
+   STEMMA QT port. Many OLED modules also include onboard pull-ups. Having parallel pull-ups
+   (Feather + OLED) lowers the effective resistance, which increases current but improves
+   signal integrity at 100kHz. This is acceptable but if you add more I²C devices,
+   verify the total pull-up resistance doesn't drop below ~1kΩ (excessive bus current).
+
+2. **Bus capacitance:** With OLED + ATECC608A on the same I²C bus, keep wires short (<10cm)
+   to minimize capacitance. Long wires may require reducing I²C speed from 400kHz to 100kHz.
+
+### WS2812B Data Integrity
+
+1. **Per-LED decoupling:** The WS2812B datasheet recommends a 100nF ceramic capacitor on
+   each LED's VDD pin for power supply filtering. These are not included in the current
+   schematic. If LEDs show color glitches or flicker, add 100nF caps as close to each
+   LED's VDD/GND pins as possible.
+
+2. **First LED distance:** Keep the wire from the level shifter output to LED1's DIN as
+   short as possible. Long data wires are susceptible to noise and signal degradation.
+
+### Key Matrix Scanning
+
+1. **Internal pull-ups:** Column pins (GPIO13/14/15/16) must have internal pull-ups enabled
+   in firmware (`INPUT_PULLUP`). Without pull-ups, unpressed keys will float and cause
+   false readings.
+
+2. **Scan rate:** For responsive keypress detection, scan the matrix at ≥1kHz (every 1ms).
+   Add debouncing (5–10ms) in firmware to filter mechanical switch bounce.
+
+---
+
 **END OF WIRING DIAGRAM**
 
 **Author:** FIDO2 Macropad Project  
-**Version:** 1.0  
-**Last Updated:** 2025-11-14  
+**Version:** 2.3  
+**Last Updated:** 2026-03-05  
 **License:** Open Source Hardware
 

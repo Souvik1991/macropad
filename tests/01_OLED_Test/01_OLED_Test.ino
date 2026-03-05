@@ -19,28 +19,21 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET -1  // Reset pin (not used)
-#define SCREEN_ADDRESS 0x3C  // Common I2C address for SSD1306
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3c // Try 0x3D if this fails!
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("OLED Test Starting...");
-  
-  // Initialize I2C with explicit pins (per wiring diagram)
-  // Wire.begin(3, 4);  // SDA=GPIO3, SCL=GPIO4
-  
-  // Initialize display
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
+  if(!display.begin(SCREEN_ADDRESS, true)) { 
+    Serial.println(F("SH1106 allocation failed"));
   }
+  Serial.println("OLED Test Starting...");
   
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
@@ -53,7 +46,7 @@ void setup() {
   
   // Display welcome message
   display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
   display.setCursor(0, 0);
   display.println(F("FIDO2 Macropad"));
   display.println(F("-------------"));
@@ -87,7 +80,7 @@ void loop() {
 void testIdleMode() {
   display.clearDisplay();
   display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
   
   display.setCursor(0, 0);
   display.println(F("MACROPAD READY"));
@@ -100,8 +93,8 @@ void testIdleMode() {
   // Draw volume bar
   int volume = 65;
   int barWidth = (volume * 50) / 100;
-  display.fillRect(0, 56, barWidth, 6, SSD1306_WHITE);
-  display.drawRect(0, 56, 50, 6, SSD1306_WHITE);
+  display.fillRect(0, 56, barWidth, 6, SH110X_WHITE);
+  display.drawRect(0, 56, 50, 6, SH110X_WHITE);
   display.setCursor(54, 56);
   display.print(volume);
   display.print(F("%"));
@@ -113,12 +106,12 @@ void testIdleMode() {
 void testFIDO2Mode() {
   display.clearDisplay();
   display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
   
   // Draw lock icon (simple representation)
-  display.fillRect(8, 5, 10, 12, SSD1306_WHITE);
-  display.fillRect(10, 7, 6, 8, SSD1306_BLACK);
-  display.drawRect(6, 12, 14, 8, SSD1306_WHITE);
+  display.fillRect(8, 5, 10, 12, SH110X_WHITE);
+  display.fillRect(10, 7, 6, 8, SH110X_BLACK);
+  display.drawRect(6, 12, 14, 8, SH110X_WHITE);
   
   display.setCursor(22, 8);
   display.setTextSize(1);
@@ -137,13 +130,13 @@ void testFIDO2Mode() {
 void testSuccessMode() {
   display.clearDisplay();
   display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
   
   // Draw checkmark
-  display.drawLine(10, 20, 15, 25, SSD1306_WHITE);
-  display.drawLine(15, 25, 25, 10, SSD1306_WHITE);
-  display.drawLine(11, 20, 16, 25, SSD1306_WHITE);
-  display.drawLine(16, 25, 26, 10, SSD1306_WHITE);
+  display.drawLine(10, 20, 15, 25, SH110X_WHITE);
+  display.drawLine(15, 25, 25, 10, SH110X_WHITE);
+  display.drawLine(11, 20, 16, 25, SH110X_WHITE);
+  display.drawLine(16, 25, 26, 10, SH110X_WHITE);
   
   display.setCursor(35, 12);
   display.println(F("LOGIN"));
@@ -161,13 +154,13 @@ void testSuccessMode() {
 void testErrorMode() {
   display.clearDisplay();
   display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
   
   // Draw X
-  display.drawLine(10, 10, 25, 25, SSD1306_WHITE);
-  display.drawLine(25, 10, 10, 25, SSD1306_WHITE);
-  display.drawLine(11, 10, 26, 25, SSD1306_WHITE);
-  display.drawLine(26, 10, 11, 25, SSD1306_WHITE);
+  display.drawLine(10, 10, 25, 25, SH110X_WHITE);
+  display.drawLine(25, 10, 10, 25, SH110X_WHITE);
+  display.drawLine(11, 10, 26, 25, SH110X_WHITE);
+  display.drawLine(26, 10, 11, 25, SH110X_WHITE);
   
   display.setCursor(35, 12);
   display.println(F("AUTH"));
@@ -186,8 +179,8 @@ void testCounter() {
   for(int i = 0; i <= 10; i++) {
     display.clearDisplay();
     display.setTextSize(2);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(30, 20);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(10, 20);
     display.print(F("Count: "));
     display.println(i);
     display.display();
