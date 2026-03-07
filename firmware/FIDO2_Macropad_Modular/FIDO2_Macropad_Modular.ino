@@ -6,14 +6,17 @@
  * 
  * This is the main entry point. Component logic is split into:
  * - config.h          - Pin definitions and constants
- * - display.ino       - OLED display management
- * - leds.ino          - WS2812B LED control
- * - keymatrix.ino     - Key scanning and macro execution
- * - encoders.ino      - Rotary encoder handling
- * - fingerprint.ino   - Fingerprint sensor management
- * - secure.ino        - ATECC608A secure element
- * - usb_hid.ino       - USB HID keyboard functionality
- * - fido2.ino         - FIDO2/CTAP2 protocol (future)
+ * - display.h/cpp      - OLED display management
+ * - leds.h/cpp         - WS2812B LED control
+ * - keymatrix.h/cpp    - Key scanning and macro execution
+ * - encoders.h/cpp     - Rotary encoder handling
+ * - fingerprint.h/cpp  - Fingerprint sensor management
+ * - secure.h/cpp       - ATECC608A secure element
+ * - usb_hid.h/cpp     - USB HID keyboard functionality
+ * - fido2.h/cpp       - FIDO2/CTAP2 protocol (future)
+ * - settings.h/cpp    - EEPROM configuration storage
+ * - commands.h/cpp    - Serial command parser
+ * - debug.h/cpp       - Debug output utilities
  * 
  * Author: [Your Name]
  * Version: 2.0.0 (Modular)
@@ -21,6 +24,18 @@
  */
 
 #include "config.h"
+#include "commands.h"
+#include "cred_store.h"
+#include "debug.h"
+#include "display.h"
+#include "encoders.h"
+#include "fingerprint.h"
+#include "fido2.h"
+#include "keymatrix.h"
+#include "leds.h"
+#include "secure.h"
+#include "settings.h"
+#include "usb_hid.h"
 
 // ============================================
 // GLOBAL STATE
@@ -29,6 +44,13 @@
 SystemMode currentMode = MODE_IDLE;
 OperatingSystem currentOS = OS_WINDOWS;  // Change to OS_MAC if using Mac
 int volumeLevel = 50;
+unsigned long volumeOverlayUntil = 0;
+uint8_t fpEnrollStep = 0;  // Fingerprint enrollment scan step (0=idle, 1-3=scanning)
+int8_t fpMenuSelection = 0;      // Highlighted item in delete menu
+uint8_t fpMenuItemCount = 0;     // Total items in delete menu
+uint8_t fpDeleteTargetId = 0;    // ID selected for deletion
+bool fpConfirmYes = false;       // Confirm dialog selection
+uint8_t fpAuthAttempt = 0;       // Current fingerprint auth attempt (1-3)
 
 // ============================================
 // SETUP
@@ -52,6 +74,7 @@ void setup() {
   initSecureElement();
   initFingerprint();
   initUSB();
+  initFIDO2();                // Load FIDO2 credentials from NVS
   
   debugPrintln("✓ All systems initialized!");
   debugPrintln("========================================");
@@ -59,7 +82,7 @@ void setup() {
   // Show ready screen
   currentMode = MODE_IDLE;
   updateDisplay();
-  setLEDPattern(PATTERN_IDLE);
+  // LED colors are already loaded from EEPROM by initSettings() → loadLEDColors()
 }
 
 // ============================================
@@ -72,7 +95,15 @@ void loop() {
   
   // Update all components
   scanKeyMatrix();
-  updateEncoders();
+  
+  // Route encoder input: interactive menus take priority over volume control
+  if (currentMode == MODE_FP_DELETE_MENU || currentMode == MODE_FP_DELETE_CONFIRM
+      || currentMode == MODE_KEY_SLOT_REPLACE_MENU || currentMode == MODE_KEY_SLOT_REPLACE_CONFIRM) {
+    updateFingerprintDeleteMenu();
+  } else {
+    updateEncoders();
+  }
+  
   checkFIDO2Requests();
   updateDisplay();
   updateLEDs();

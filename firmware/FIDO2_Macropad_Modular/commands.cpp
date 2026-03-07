@@ -1,26 +1,26 @@
 /*
- * Serial Command Parser
+ * Serial Command Parser - Implementation
  * Handles configuration commands via Serial/USB
- * 
- * Commands:
- *   MACRO <key> <type> <modifier> <keycode> [data]  - Set macro
- *   SEQUENCE <key> <os> <steps>                     - Set sequence macro (os: win/mac, steps: K:mod:key|T:text|D:delay|R)
- *   LED <index> <r> <g> <b>                         - Set LED color
- *   BRIGHTNESS <value>                              - Set LED brightness (0-255)
- *   OS <mode>                                       - Set OS mode (mac/win)
- *   LIST                                             - List all macros
- *   RESET                                            - Reset to defaults
- *   HELP                                             - Show help
  */
 
-// Forward declarations
-extern MacroConfig storedMacros[NUM_MACROS];
-void saveKeyName(int keyNum, const char* name);
-void loadKeyName(int keyNum, char* name, int maxLen);
+#include "config.h"
+#include "commands.h"
+#include "debug.h"
+#include "display.h"
+#include "leds.h"
+#include "settings.h"
+#include <Arduino.h>
+#include <string.h>
 
-// ============================================
-// COMMAND PROCESSING
-// ============================================
+void handleMacroCommand(String args);
+void handleSequenceCommand(String args);
+void handleLEDCommand(String args);
+void handleBrightnessCommand(String args);
+void handleOSCommand(String args);
+void handleNameCommand(String args);
+void handleListCommand();
+void handleResetCommand();
+void handleHelpCommand();
 
 void processSerialCommands() {
   if (Serial.available() > 0) {
@@ -30,7 +30,6 @@ void processSerialCommands() {
     
     if (cmd.length() == 0) return;
     
-    // Parse command
     int spaceIdx = cmd.indexOf(' ');
     String command = (spaceIdx > 0) ? cmd.substring(0, spaceIdx) : cmd;
     String args = (spaceIdx > 0) ? cmd.substring(spaceIdx + 1) : "";
@@ -59,14 +58,7 @@ void processSerialCommands() {
   }
 }
 
-// ============================================
-// COMMAND HANDLERS
-// ============================================
-
 void handleMacroCommand(String args) {
-  // Format: MACRO <key> <type> <modifier> <keycode> [data]
-  // Example: MACRO 1 1 0 4  (Key 1, keycombo, no modifier, keycode 4)
-  
   int keyNum = args.substring(0, args.indexOf(' ')).toInt();
   args = args.substring(args.indexOf(' ') + 1);
   
@@ -90,27 +82,21 @@ void handleMacroCommand(String args) {
   macro.keycode = keycode;
   memset(macro.data, 0, 5);
   
-  // Copy string data if provided
   if (data.length() > 0) {
-    int len = min(data.length(), 5);
+    int len = (data.length() < 5) ? (int)data.length() : 5;
     for (int i = 0; i < len; i++) {
       macro.data[i] = data[i];
     }
   }
   
   saveMacro(keyNum, macro);
-  loadMacros();  // Reload macros
+  loadMacros();
   
   debugPrint("OK: Macro saved for Key ");
   debugPrintln(keyNum);
 }
 
 void handleSequenceCommand(String args) {
-  // Format: SEQUENCE <key> <os> <step1>|<step2>|...
-  // OS: win or mac
-  // Step format: K:modifier:keycode, T:text, D:delay, R:release
-  // Example: SEQUENCE 1 win K:8:18|D:200|T:calc|D:100|K:0:40
-
   int firstSpace = args.indexOf(' ');
   if (firstSpace <= 0) {
     debugPrintln("ERROR: Format: SEQUENCE <key> <os> <steps>");
@@ -144,30 +130,25 @@ void handleSequenceCommand(String args) {
     return;
   }
 
-  // Calculate sequence address for this key and OS
   int seqAddr = EEPROM_ADDR_SEQUENCES + ((keyNum - 1) * 2 + osOffset) * MAX_SEQUENCE_LENGTH;
-  int len = min(sequenceStr.length(), MAX_SEQUENCE_LENGTH - 1);
+  int len = (sequenceStr.length() < (unsigned int)(MAX_SEQUENCE_LENGTH - 1)) ? (int)sequenceStr.length() : (MAX_SEQUENCE_LENGTH - 1);
 
-  // Store sequence string (null-terminated)
   for (int i = 0; i < len; i++) {
     EEPROM.write(seqAddr + i, sequenceStr[i]);
   }
-  EEPROM.write(seqAddr + len, 0); // Null terminator
+  EEPROM.write(seqAddr + len, 0);
   EEPROM.commit();
 
   debugPrint("OK: Sequence saved for Key ");
   debugPrint(keyNum);
   debugPrint(" (");
-  debugPrint(osStr);
+  debugPrint(osStr.c_str());
   debugPrint(") - ");
   debugPrint(len);
   debugPrintln(" bytes)");
 }
 
 void handleLEDCommand(String args) {
-  // Format: LED <index> <r> <g> <b>
-  // Example: LED 0 255 0 0  (LED 0, red)
-  
   int index = args.substring(0, args.indexOf(' ')).toInt();
   args = args.substring(args.indexOf(' ') + 1);
   
@@ -202,9 +183,7 @@ void handleLEDCommand(String args) {
 void handleBrightnessCommand(String args) {
   int brightness = args.toInt();
   brightness = constrain(brightness, 0, 255);
-  
   saveLEDBrightness(brightness);
-  
   debugPrint("OK: Brightness set to ");
   debugPrintln(brightness);
 }
@@ -228,9 +207,6 @@ void handleOSCommand(String args) {
 }
 
 void handleNameCommand(String args) {
-  // Format: NAME <key> <name>
-  // Example: NAME 1 Calculator
-  
   int spaceIdx = args.indexOf(' ');
   if (spaceIdx <= 0) {
     debugPrintln("ERROR: Format: NAME <key> <name>");
@@ -257,7 +233,7 @@ void handleNameCommand(String args) {
   debugPrint("OK: Key ");
   debugPrint(keyNum);
   debugPrint(" renamed to: ");
-  debugPrintln(name);
+  debugPrintln(name.c_str());
 }
 
 void handleListCommand() {
@@ -273,7 +249,6 @@ void handleListCommand() {
     debugPrint(i + 1);
     debugPrint("   | ");
     
-    // Print name (padded to 17 chars)
     debugPrint(keyName);
     int nameLen = strlen(keyName);
     for (int j = nameLen; j < 17; j++) {
@@ -331,22 +306,13 @@ void handleListCommand() {
 void handleResetCommand() {
   debugPrintln("Resetting to defaults...");
   
-  // Reset macros
   initDefaultMacros();
   loadMacros();
-  
-  // Reset LED colors
   initDefaultLEDColors();
   loadLEDColors();
-  
-  // Reset key names
   initDefaultKeyNames();
-  
-  // Reset OS mode
   saveOSMode(OS_WINDOWS);
   loadOSMode();
-  
-  // Reset brightness
   saveLEDBrightness(LED_BRIGHTNESS);
   
   debugPrintln("OK: Reset complete");
@@ -394,4 +360,3 @@ void handleHelpCommand() {
   debugPrintln("  Show this help message");
   debugPrintln();
 }
-

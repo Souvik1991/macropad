@@ -819,7 +819,7 @@ Dimensions (Approximate):
 - OLED: 1.3" diagonal (128×64 pixels)
 - Fingerprint: 25mm diameter (round capacitive)
 - Encoder: 12mm diameter knob
-- LED strip: 5× WS2812B-2020 (2mm mini SMD LEDs)
+- LED strip: 5× WS2812B (5050 or 2020; 5050 easier to solder)
 ```
 
 ### Side View - Layer Stack
@@ -1058,7 +1058,7 @@ Component Placement Tips:
 | **Display** | SH1106 OLED 1.3" | 1 | I²C interface |
 | **Input** | Cherry MX switches | 12 | Or compatible |
 | **Input** | EC11 Rotary encoder module | 1 | With push button |
-| **LEDs** | WS2812B-2020 RGB | 5 | Addressable, 2mm mini |
+| **LEDs** | WS2812B-5050 or 2020 RGB | 5 | Addressable (5050 easier to solder) |
 | **Diodes** | 1N4148 (DO-35) | 12 | For key matrix |
 | **Level Shift** | SN74AHCT1G125DBVR | 1 | SOT-23-5 buffer IC (TI), LCSC: C7484 |
 | **Capacitors** | 220uF/16V Electrolytic | 2 | Bulk decoupling (3.3V + 5V rails) |
@@ -1081,7 +1081,7 @@ Component Placement Tips:
 | ATECC608A | ₹300-500 |
 | 12× Switches | ₹600-1,200 |
 | 1× Encoder module | ₹100-200 |
-| 5× WS2812B-2020 LEDs | ₹75-150 |
+| 5× WS2812B-5050 or 2020 LEDs | ₹75-150 |
 | Keycaps | ₹300-500 |
 | Electronics (diodes, resistors, caps, etc) | ₹200-300 |
 | Cables & Prototyping | ₹300-500 |

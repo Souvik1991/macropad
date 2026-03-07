@@ -3,6 +3,23 @@
   ESP32-S3 FIDO2 Macropad
 ========================================
 
+FILE STRUCTURE
+--------------
+One main .ino file (FIDO2_Macropad_Modular.ino) with setup() and loop().
+All other modules use .h (declarations) and .cpp (implementations):
+- config.h         - Pin definitions, constants, global externs
+- debug.h/cpp      - Debug output utilities
+- display.h/cpp    - OLED display management
+- leds.h/cpp       - WS2812B LED control
+- encoders.h/cpp   - Rotary encoder handling
+- keymatrix.h/cpp  - Key scanning and macro execution
+- usb_hid.h/cpp    - USB HID keyboard functionality
+- settings.h/cpp   - EEPROM configuration storage
+- commands.h/cpp   - Serial command parser
+- secure.h/cpp     - ATECC608A secure element
+- fingerprint.h/cpp - Fingerprint sensor management
+- fido2.h/cpp      - FIDO2/CTAP2 protocol (future)
+
 OVERVIEW
 --------
 The firmware is structured in a modular architecture with clear separation of concerns:

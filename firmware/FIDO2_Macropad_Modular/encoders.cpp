@@ -1,19 +1,20 @@
 /*
- * Encoder Module
+ * Encoder Module - Implementation
  * Handles single rotary encoder input (volume + mute)
  */
 
-// ============================================
-// STATE VARIABLES
-// ============================================
+#include "config.h"
+#include "debug.h"
+#include "display.h"
+#include "encoders.h"
+#include "leds.h"
+#include "usb_hid.h"
 
 volatile int encoderPosition = 0;
 int lastEncoderCLK = HIGH;
 bool isMuted = false;
 
-// ============================================
-// INITIALIZATION
-// ============================================
+void readEncoder();
 
 void initEncoders() {
   debugPrint("Initializing encoder... ");
@@ -29,10 +30,6 @@ void initEncoders() {
   debugPrintln("OK");
 }
 
-// ============================================
-// INTERRUPT HANDLER
-// ============================================
-
 void IRAM_ATTR readEncoder() {
   int clkState = digitalRead(ENCODER_CLK);
   int dtState = digitalRead(ENCODER_DT);
@@ -47,19 +44,17 @@ void IRAM_ATTR readEncoder() {
   lastEncoderCLK = clkState;
 }
 
-// ============================================
-// ENCODER UPDATE (called in main loop)
-// ============================================
-
 void updateEncoders() {
   static int lastEncoderPos = 0;
+  static bool encoderPressed = false;
   static unsigned long lastButtonTime = 0;
-  const unsigned long debounceDelay = 300;
+  const unsigned long debounceDelay = 200;
   
   // ========== ROTATION (VOLUME CONTROL) ==========
   
   if (encoderPosition != lastEncoderPos) {
     int diff = encoderPosition - lastEncoderPos;
+    lastEncoderPos = encoderPosition;
     
     // Only change volume if not muted
     if (!isMuted) {
@@ -70,29 +65,38 @@ void updateEncoders() {
       debugPrint(volumeLevel);
       debugPrintln("%");
       
-      // Send volume HID commands
+      // Send volume HID commands per step (matching tested code)
       if (diff > 0) {
-        sendVolumeUp();
+        for (int i = 0; i < diff; i++) {
+          sendVolumeUp();
+          delay(10);
+        }
       } else {
-        sendVolumeDown();
+        for (int i = 0; i < -diff; i++) {
+          sendVolumeDown();
+          delay(10);
+        }
       }
       
-      updateDisplay();
+      // Trigger volume overlay on OLED
+      volumeOverlayUntil = millis() + 1500;
     } else {
       debugPrintln("Volume locked (muted)");
     }
-    
-    lastEncoderPos = encoderPosition;
   }
   
   // ========== BUTTON PRESS (MUTE/UNMUTE) ==========
+  // Edge detection: trigger once on press, reset on release
   
-  if (digitalRead(ENCODER_SW) == LOW) {
+  if (digitalRead(ENCODER_SW) == LOW && !encoderPressed) {
     if ((millis() - lastButtonTime) > debounceDelay) {
+      encoderPressed = true;
+      lastButtonTime = millis();
+      
       // Toggle mute state
       isMuted = !isMuted;
       
-      debugPrint("🔊 Audio: ");
+      debugPrint("Audio: ");
       debugPrintln(isMuted ? "MUTED" : "UNMUTED");
       
       // Send mute command
@@ -100,24 +104,19 @@ void updateEncoders() {
       
       // Visual feedback
       if (isMuted) {
-        // Red flash for mute
         flashAllLEDs(CRGB::Red, 150);
       } else {
-        // Green flash for unmute
         flashAllLEDs(CRGB::Green, 150);
       }
       
-      updateDisplay();
-      lastButtonTime = millis();
+      // Trigger volume overlay on OLED
+      volumeOverlayUntil = millis() + 1500;
     }
+  } else if (digitalRead(ENCODER_SW) == HIGH && encoderPressed) {
+    encoderPressed = false;
   }
 }
-
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
 
 bool isMutedState() {
   return isMuted;
 }
-

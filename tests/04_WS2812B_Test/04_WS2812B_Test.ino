@@ -1,7 +1,7 @@
 /*
  * WS2812B RGB LED Test Sketch
  * Board: Adafruit ESP32-S3 Feather
- * LEDs: 4-5x WS2812B-2020 (underglow)
+ * LEDs: 4-5x WS2812B-5050 or 2020 (underglow)
  * 
  * Connections (with SN74AHCT1G125 Level Shifter):
  * ESP32 GPIO17 -> SN74AHCT1G125 Pin 2 (A - Input)

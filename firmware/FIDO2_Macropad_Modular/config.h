@@ -12,7 +12,7 @@
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 #include <FastLED.h>
 #include <SparkFun_ATECCX08a_Arduino_Library.h>
 #include <Adafruit_TinyUSB.h>
@@ -25,7 +25,7 @@
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-#define SCREEN_ADDRESS 0x3C
+#define SCREEN_ADDRESS 0x3c
 
 // ============================================
 // LED CONFIGURATION
@@ -71,7 +71,10 @@ const int colPins[MATRIX_COLS] = {13, 14, 15, 16};
 
 #define FINGERPRINT_RX 38  // ESP32 UART1 RX (U1RXD)
 #define FINGERPRINT_TX 39  // ESP32 UART1 TX (U1TXD)
-#define FINGERPRINT_BAUD 57600
+#define FINGERPRINT_RST 18 // Sleep/wake control (output): LOW=sleep, HIGH=active
+#define FINGERPRINT_WAKE 8 // Finger detect (input, interrupt)
+#define FINGERPRINT_BAUD 19200
+#define USER_MAX_CNT 500   // Max fingerprint templates (Waveshare sensor)
 
 // ============================================
 // EEPROM CONFIGURATION
@@ -114,7 +117,23 @@ enum SystemMode {
   MODE_FIDO2_WAITING,
   MODE_FIDO2_VERIFYING,
   MODE_FIDO2_SUCCESS,
-  MODE_FIDO2_ERROR
+  MODE_FIDO2_ERROR,
+  MODE_FP_ENROLL,        // Fingerprint enrollment in progress
+  MODE_FP_ENROLL_OK,     // Enrollment succeeded
+  MODE_FP_ENROLL_FAIL,   // Enrollment failed
+  MODE_FP_DELETE,        // Delete in progress
+  MODE_FP_DELETE_OK,     // Delete succeeded
+  MODE_FP_DELETE_FAIL,   // Delete failed
+  MODE_FP_FULL,          // Storage full - cannot enroll
+  MODE_FP_DELETE_MENU,   // Interactive delete list
+  MODE_FP_DELETE_CONFIRM,// Confirm delete dialog
+  MODE_KEY_SLOTS_FULL,       // All 14 passkey slots used
+  MODE_KEY_SLOT_REPLACE_MENU,    // Pick a slot to replace
+  MODE_KEY_SLOT_REPLACE_CONFIRM, // Confirm slot replacement
+  MODE_FIDO2_FP_RETRY,         // Fingerprint scan failed, retry prompt
+  MODE_FIDO2_FP_TIMEOUT,       // No finger detected (timeout)
+  MODE_FIDO2_FP_SENSOR_ERR,    // Sensor hardware/UART error
+  MODE_FIDO2_FP_FAILED         // All 3 fingerprint attempts failed
 };
 
 enum OperatingSystem {
@@ -135,16 +154,28 @@ enum OperatingSystem {
 extern SystemMode currentMode;
 extern OperatingSystem currentOS;
 extern int volumeLevel;
+extern unsigned long volumeOverlayUntil;  // millis() timestamp for volume overlay auto-hide
+extern uint8_t fpEnrollStep;   // 0 = not enrolling, 1-3 = current scan step
+extern int8_t fpMenuSelection;     // Highlighted item in delete menu (0=Back, 1..N=fingerprint IDs)
+extern uint8_t fpMenuItemCount;    // Total items in delete menu
+extern uint8_t fpDeleteTargetId;   // ID selected for deletion
+extern bool fpConfirmYes;          // Confirm dialog selection (true=Yes)
+extern int8_t keySlotMenuSelection;   // Selected slot in replace menu
+extern uint8_t keySlotMenuItemCount;  // Total items in slot replace menu
+extern uint8_t keySlotReplaceTarget;  // Slot selected for replacement
+extern bool keySlotConfirmYes;        // Confirm dialog selection
+extern uint8_t fpAuthAttempt;          // Current fingerprint auth attempt (1-3) for FIDO2
 
 // ============================================
 // GLOBAL OBJECTS (defined in respective .ino files)
 // ============================================
 
-extern Adafruit_SSD1306 display;
+extern Adafruit_SH1106G display;
 extern CRGB leds[NUM_LEDS];
 extern ATECCX08A atecc;
 extern HardwareSerial fingerprintSerial;
-extern Adafruit_USBD_HID usb_hid;
+extern Adafruit_USBD_HID usb_kbd;   // keyboard interface
+extern Adafruit_USBD_HID usb_fido;  // FIDO2 interface
 
 // ============================================
 // MACRO STRUCTURE
@@ -156,6 +187,8 @@ struct MacroConfig {
   uint8_t keycode;     // HID key code
   uint8_t data[5];     // String data or additional params
 };
+
+extern MacroConfig storedMacros[NUM_MACROS];
 
 #endif // CONFIG_H
 

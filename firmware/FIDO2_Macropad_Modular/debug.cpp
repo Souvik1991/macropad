@@ -1,13 +1,12 @@
 /*
- * Debug Utility Module
+ * Debug Utility Module - Implementation
  * Provides centralized debug printing with enable/disable control
  */
 
-// ============================================
-// DEBUG FUNCTIONS
-// ============================================
+#include "config.h"
+#include "debug.h"
+#include <stdarg.h>
 
-// Print without newline (same line)
 void debugPrint(const char* str) {
   #if DEBUG_ENABLED
     Serial.print(str);
@@ -17,6 +16,12 @@ void debugPrint(const char* str) {
 void debugPrint(int num) {
   #if DEBUG_ENABLED
     Serial.print(num);
+  #endif
+}
+
+void debugPrint(int num, int format) {
+  #if DEBUG_ENABLED
+    Serial.print(num, format);
   #endif
 }
 
@@ -50,7 +55,6 @@ void debugPrint(double num) {
   #endif
 }
 
-// Print with newline
 void debugPrintln(const char* str) {
   #if DEBUG_ENABLED
     Serial.println(str);
@@ -93,14 +97,12 @@ void debugPrintln(double num) {
   #endif
 }
 
-// Print empty line
 void debugPrintln() {
   #if DEBUG_ENABLED
     Serial.println();
   #endif
 }
 
-// Print F() macro strings (for PROGMEM strings)
 void debugPrint(const __FlashStringHelper* str) {
   #if DEBUG_ENABLED
     Serial.print(str);
@@ -113,3 +115,13 @@ void debugPrintln(const __FlashStringHelper* str) {
   #endif
 }
 
+void debugPrintf(const char* fmt, ...) {
+  #if DEBUG_ENABLED
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    Serial.print(buf);
+  #endif
+}
