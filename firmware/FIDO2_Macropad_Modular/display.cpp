@@ -7,6 +7,10 @@
 #include "debug.h"
 #include "display.h"
 #include "encoders.h"
+#include "fingerprint.h"
+#include "secure.h"
+#include "settings.h"
+#include <string.h>
 
 Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -55,6 +59,11 @@ void displayFPFullScreen();
 void displayFPDeleteMenuScreen();
 void displayFPDeleteConfirmScreen();
 void displayVolumeOverlay();
+void displayBootCheckScreen();
+void displayBootFailScreen();
+void displayFPRequiredScreen();
+void displaySetupNeededScreen();
+void displaySystemMenuScreen();
 
 void updateDisplay() {
   display.clearDisplay();
@@ -130,6 +139,21 @@ void updateDisplay() {
     case MODE_FP_DELETE_CONFIRM:
       displayFPDeleteConfirmScreen();
       break;
+    case MODE_BOOT_CHECK:
+      displayBootCheckScreen();
+      break;
+    case MODE_BOOT_FAIL:
+      displayBootFailScreen();
+      break;
+    case MODE_FP_REQUIRED:
+      displayFPRequiredScreen();
+      break;
+    case MODE_SETUP_NEEDED:
+      displaySetupNeededScreen();
+      break;
+    case MODE_SYSTEM_MENU:
+      displaySystemMenuScreen();
+      break;
     default:
       displayIdleScreen();
       break;
@@ -169,14 +193,47 @@ void drawStatusBar() {
 }
 
 void displayIdleScreen() {
-  display.println(F("READY FOR ACTION"));
-  display.println(F("---------------"));
-  display.println(F("R1:Shot Mic Vid Lock"));
-  display.println(F("R2:Copy Cut Pst Del"));
-  display.println(F("R3:Cur Insp Trm Git"));
-  display.println();
-  display.println(F("Double-tap Key 12"));
-  display.print(F("to switch OS mode"));
+  display.setTextSize(1);
+
+  // Dynamic 3x4 macro grid matching the physical key matrix
+  // Each cell shows first 4 chars of key name, or [X] if disabled
+  char name[MAX_KEY_NAME_LENGTH + 1];
+  int cellW = 32;  // 128px / 4 cols = 32px per cell
+  int startY = 13;
+  int rowH = 11;
+
+  for (int row = 0; row < MATRIX_ROWS; row++) {
+    for (int col = 0; col < MATRIX_COLS; col++) {
+      int keyIdx = row * MATRIX_COLS + col;  // 0-based index into storedMacros[]
+      int cellX = col * cellW;
+      int cellY = startY + row * rowH;
+
+      display.setCursor(cellX + 1, cellY + 2);
+
+      if (storedMacros[keyIdx].type != MACRO_TYPE_DISABLED) {
+        // Show first 4 chars of key name
+        loadKeyName(keyIdx + 1, name, sizeof(name));
+        if (name[0] != 0) {
+          name[4] = '\0';  // Truncate to 4 chars
+          display.print(name);
+        } else {
+          // Macro configured but no name — show key number
+          display.print(F("K"));
+          display.print(keyIdx + 1);
+        }
+      } else {
+        display.print(F("[X]"));
+      }
+    }
+  }
+
+  // Divider line below the grid
+  int gridBottom = startY + MATRIX_ROWS * rowH + 1;
+  display.drawLine(0, gridBottom, SCREEN_WIDTH, gridBottom, SH110X_WHITE);
+
+  // Bottom area: helpful info
+  display.setCursor(0, gridBottom + 3);
+  display.print(F("Hold K9+K12 = Menu"));
 }
 
 // =====================================================
@@ -793,6 +850,181 @@ void displayFPDeleteConfirmScreen() {
 
   // Reset
   display.setTextColor(SH110X_WHITE);
+}
+
+// =====================================================
+// System Menu Screen (Nokia-style inverted highlight)
+// =====================================================
+
+void displaySystemMenuScreen() {
+  display.setTextSize(1);
+
+  // Title bar (inverted)
+  display.fillRect(0, 12, SCREEN_WIDTH, 10, SH110X_WHITE);
+  display.setTextColor(SH110X_BLACK);
+  display.setCursor(2, 13);
+  display.print(F("   SYSTEM MENU"));
+  display.setTextColor(SH110X_WHITE);
+
+  // Menu items area: y=24 to y=63 (40px), each row = 10px, 4 visible rows
+  int rowHeight = 10;
+  int menuY = 24;
+
+  // Menu item labels
+  const char* labels[] = {
+    "Toggle OS",
+    "Enroll Finger",
+    "Delete Finger",
+    "Exit"
+  };
+
+  for (int i = 0; i < (int)sysMenuItemCount; i++) {
+    int rowY = menuY + i * rowHeight;
+    bool isSelected = (i == sysMenuSelection);
+
+    if (isSelected) {
+      display.fillRect(0, rowY, SCREEN_WIDTH, rowHeight, SH110X_WHITE);
+      display.setTextColor(SH110X_BLACK);
+    } else {
+      display.setTextColor(SH110X_WHITE);
+    }
+
+    display.setCursor(4, rowY + 1);
+
+    if (i == 0) {
+      // Show current OS in the toggle item
+      display.print(F("Toggle OS ("));
+      display.print(currentOS == OS_MAC ? F("Mac") : F("Win"));
+      display.print(F(")"));
+    } else {
+      display.print(labels[i]);
+    }
+
+    display.setTextColor(SH110X_WHITE);
+  }
+}
+
+// =====================================================
+// Boot Check Screen (component health diagnostics)
+// =====================================================
+
+void displayBootCheckScreen() {
+  display.setTextSize(1);
+
+  display.setCursor(10, 13);
+  display.println(F("SYSTEM CHECK"));
+  display.drawLine(0, 23, SCREEN_WIDTH, 23, SH110X_WHITE);
+
+  // ATECC608A status
+  display.setCursor(4, 26);
+  display.print(isDevicePresent() ? F("[OK] ") : F("[!!] "));
+  display.println(F("Secure Element"));
+
+  // Fingerprint sensor status
+  display.setCursor(4, 36);
+  display.print(isFingerprintSensorPresent() ? F("[OK] ") : F("[!!] "));
+  display.println(F("FP Sensor"));
+
+  // USB (always assumed OK if we got this far)
+  display.setCursor(4, 46);
+  display.println(F("[OK] USB HID"));
+
+  // Overall status
+  display.setCursor(4, 57);
+  if (isDevicePresent() && isFingerprintSensorPresent()) {
+    display.print(F("All systems GO"));
+  } else {
+    display.print(F("Issues detected!"));
+  }
+}
+
+// =====================================================
+// Boot Fail Screen (critical component missing)
+// =====================================================
+
+void displayBootFailScreen() {
+  display.setTextSize(1);
+
+  // Warning icon (triangle with !)
+  int triX = 64;
+  int triTop = 14;
+  display.drawTriangle(triX, triTop, triX - 10, triTop + 16, triX + 10, triTop + 16, SH110X_WHITE);
+  display.drawTriangle(triX + 1, triTop, triX - 9, triTop + 16, triX + 11, triTop + 16, SH110X_WHITE);
+  display.setCursor(triX - 2, triTop + 6);
+  display.print(F("!"));
+
+  display.setCursor(10, 34);
+  display.println(F("BOOT FAILED"));
+
+  // Show what's missing
+  display.setCursor(4, 46);
+  if (!isDevicePresent()) {
+    display.println(F("ATECC608A missing"));
+  }
+  if (!isFingerprintSensorPresent()) {
+    display.setCursor(4, 56);
+    display.println(F("FP Sensor missing"));
+  }
+}
+
+// =====================================================
+// Fingerprint Required Screen (boot enrollment gate)
+// =====================================================
+
+void displayFPRequiredScreen() {
+  display.setTextSize(1);
+
+  // Fingerprint icon
+  int fpX = 50;
+  int fpY = 14;
+  display.drawRoundRect(fpX, fpY, 18, 22, 6, SH110X_WHITE);
+  display.drawRoundRect(fpX + 4, fpY + 5, 10, 12, 4, SH110X_WHITE);
+  display.drawRoundRect(fpX + 7, fpY + 8, 4, 6, 2, SH110X_WHITE);
+
+  display.setCursor(4, 14);
+  display.println(F("NO FINGER"));
+  display.setCursor(4, 24);
+  display.println(F("ENROLLED"));
+
+  display.setCursor(4, 40);
+  display.println(F("Press encoder to"));
+  display.setCursor(4, 50);
+  display.println(F("start enrollment"));
+}
+
+// =====================================================
+// Setup Needed Screen (no macros configured)
+// =====================================================
+
+void displaySetupNeededScreen() {
+  display.setTextSize(1);
+
+  display.setCursor(10, 14);
+  display.println(F("NO MACROS SET"));
+  display.drawLine(0, 24, SCREEN_WIDTH, 24, SH110X_WHITE);
+
+  display.setCursor(4, 28);
+  display.println(F("Configure at:"));
+
+  // Print URL with automatic word wrapping for long URLs
+  // At text size 1, each char is 6px wide → 21 chars per line
+  const char* url = SETUP_URL;
+  int urlLen = strlen(url);
+  int charsPerLine = 21;
+  int y = 40;
+
+  int pos = 0;
+  while (pos < urlLen && y < 60) {
+    display.setCursor(4, y);
+    int remaining = urlLen - pos;
+    int lineLen = (remaining > charsPerLine) ? charsPerLine : remaining;
+
+    for (int i = 0; i < lineLen; i++) {
+      display.print(url[pos + i]);
+    }
+    pos += lineLen;
+    y += 10;
+  }
 }
 
 void displayMessage(const char* line1, const char* line2) {

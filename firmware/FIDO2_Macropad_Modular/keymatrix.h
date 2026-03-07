@@ -8,5 +8,7 @@
 
 void initKeyMatrix();
 void scanKeyMatrix();
+void enterSystemMenu();
+void updateSystemMenu();
 
 #endif // KEYMATRIX_H

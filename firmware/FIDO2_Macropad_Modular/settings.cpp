@@ -188,80 +188,14 @@ void loadMacro(int keyNum, MacroConfig &macro) {
 
 void initDefaultMacros() {
   MacroConfig macro;
-  
-  macro.type = MACRO_TYPE_SPECIAL;
-  macro.modifier = 0;
-  macro.keycode = 1;
-  memset(macro.data, 0, 5);
-  saveMacro(1, macro);
-  
-  macro.type = MACRO_TYPE_KEYCOMBO;
-  macro.modifier = 5;
-  macro.keycode = HID_KEY_M;
-  memset(macro.data, 0, 5);
-  saveMacro(2, macro);
-  
-  macro.type = MACRO_TYPE_KEYCOMBO;
-  macro.modifier = 5;
-  macro.keycode = HID_KEY_V;
-  memset(macro.data, 0, 5);
-  saveMacro(3, macro);
-  
-  macro.type = MACRO_TYPE_SPECIAL;
-  macro.modifier = 0;
-  macro.keycode = 2;
-  memset(macro.data, 0, 5);
-  saveMacro(4, macro);
-  
-  macro.type = MACRO_TYPE_KEYCOMBO;
-  macro.modifier = 0;
-  macro.keycode = HID_KEY_C;
-  memset(macro.data, 0, 5);
-  saveMacro(5, macro);
-  
-  macro.type = MACRO_TYPE_KEYCOMBO;
-  macro.modifier = 0;
-  macro.keycode = HID_KEY_X;
-  memset(macro.data, 0, 5);
-  saveMacro(6, macro);
-  
-  macro.type = MACRO_TYPE_KEYCOMBO;
-  macro.modifier = 0;
-  macro.keycode = HID_KEY_V;
-  memset(macro.data, 0, 5);
-  saveMacro(7, macro);
-  
-  macro.type = MACRO_TYPE_KEYCOMBO;
-  macro.modifier = 0;
-  macro.keycode = HID_KEY_DELETE;
-  memset(macro.data, 0, 5);
-  saveMacro(8, macro);
-  
-  macro.type = MACRO_TYPE_SPECIAL;
-  macro.modifier = 0;
-  macro.keycode = 3;
-  memset(macro.data, 0, 5);
-  saveMacro(9, macro);
-  
-  macro.type = MACRO_TYPE_KEYCOMBO;
-  macro.modifier = 0;
-  macro.keycode = HID_KEY_F12;
-  memset(macro.data, 0, 5);
-  saveMacro(10, macro);
-  
-  macro.type = MACRO_TYPE_SPECIAL;
-  macro.modifier = 0;
-  macro.keycode = 4;
-  memset(macro.data, 0, 5);
-  saveMacro(11, macro);
-  
-  macro.type = MACRO_TYPE_SPECIAL;
-  macro.modifier = 0;
-  macro.keycode = 5;
-  memset(macro.data, 0, 5);
-  saveMacro(12, macro);
-  
-  debugPrintln("Initialized default macros");
+  memset(&macro, 0, sizeof(MacroConfig));
+  macro.type = MACRO_TYPE_DISABLED;
+
+  for (int i = 1; i <= NUM_MACROS; i++) {
+    saveMacro(i, macro);
+  }
+
+  debugPrintln("Initialized macros (all disabled)");
 }
 
 void loadMacros() {
@@ -308,14 +242,17 @@ void loadKeyName(int keyNum, char* name, int maxLen) {
 }
 
 void initDefaultKeyNames() {
-  const char* defaultNames[] = {
-    "Screenshot", "Mic Mute", "Video Toggle", "Lock Screen",
-    "Copy", "Cut", "Paste", "Delete",
-    "Open Cursor", "Inspect Element", "Open Terminal", "Git Pull / OS Switch"
-  };
-  
-  for (int i = 0; i < NUM_MACROS; i++) {
-    saveKeyName(i + 1, defaultNames[i]);
+  for (int i = 1; i <= NUM_MACROS; i++) {
+    saveKeyName(i, "");
   }
-  debugPrintln("Initialized default key names");
+  debugPrintln("Initialized key names (all empty)");
+}
+
+bool hasAnyMacroConfigured() {
+  for (int i = 0; i < NUM_MACROS; i++) {
+    if (storedMacros[i].type != MACRO_TYPE_DISABLED) {
+      return true;
+    }
+  }
+  return false;
 }

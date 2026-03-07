@@ -27,5 +27,6 @@ void loadMacros();
 void saveKeyName(int keyNum, const char* name);
 void loadKeyName(int keyNum, char* name, int maxLen);
 void initDefaultKeyNames();
+bool hasAnyMacroConfigured();
 
 #endif // SETTINGS_H

@@ -51,6 +51,81 @@ uint8_t fpMenuItemCount = 0;     // Total items in delete menu
 uint8_t fpDeleteTargetId = 0;    // ID selected for deletion
 bool fpConfirmYes = false;       // Confirm dialog selection
 uint8_t fpAuthAttempt = 0;       // Current fingerprint auth attempt (1-3)
+int8_t sysMenuSelection = 0;     // Highlighted item in system menu
+uint8_t sysMenuItemCount = 4;    // Total items: Toggle OS, Enroll FP, Delete FP, Exit
+
+// ============================================
+// BOOT HEALTH CHECK
+// ============================================
+
+void runBootChecks() {
+  // --- Step 1: Show health check diagnostics ---
+  currentMode = MODE_BOOT_CHECK;
+  updateDisplay();
+  delay(2000);
+
+  bool ateccOk = isDevicePresent();
+  bool fpOk = isFingerprintSensorPresent();
+
+  // --- Step 2: If critical failure, stay on fail screen ---
+  if (!ateccOk || !fpOk) {
+    debugPrintln("BOOT CHECK FAILED:");
+    if (!ateccOk) debugPrintln("  - ATECC608A not found");
+    if (!fpOk) debugPrintln("  - Fingerprint sensor not found");
+
+    currentMode = MODE_BOOT_FAIL;
+    updateDisplay();
+
+    // Stay on fail screen until user presses encoder to acknowledge
+    while (true) {
+      if (digitalRead(ENCODER_SW) == LOW) {
+        delay(300);  // debounce
+        break;
+      }
+      delay(50);
+    }
+    // Continue anyway — the device can still serve as a basic macropad
+    debugPrintln("Boot failure acknowledged. Continuing...");
+  }
+
+  // --- Step 3: Fingerprint enrollment gate ---
+  if (fpOk) {
+    int fpCount = getFingerprintCount();
+    if (fpCount <= 0) {
+      debugPrintln("No fingerprints enrolled — entering enrollment gate");
+      currentMode = MODE_FP_REQUIRED;
+      updateDisplay();
+
+      // Wait for encoder press to start enrollment, loop until ≥1 enrolled
+      while (getFingerprintCount() <= 0) {
+        if (digitalRead(ENCODER_SW) == LOW) {
+          delay(300);  // debounce
+          enrollFingerprint(0);  // Auto-assign ID
+          // enrollFingerprint sets mode back to MODE_FP_REQUIRED on failure
+          // or MODE_IDLE on success (via enrollReturnMode)
+          if (currentMode == MODE_FP_REQUIRED) {
+            updateDisplay();  // Re-show the enrollment prompt
+          }
+        }
+        delay(50);
+      }
+      debugPrintln("Fingerprint enrollment gate passed");
+    }
+  }
+
+  // --- Step 4: Check macro configuration ---
+  if (!hasAnyMacroConfigured()) {
+    debugPrintln("No macros configured — showing setup URL");
+    currentMode = MODE_SETUP_NEEDED;
+    updateDisplay();
+    // Don't block here — fall through to loop() so serial commands can configure macros
+    return;
+  }
+
+  // --- All checks passed ---
+  currentMode = MODE_IDLE;
+  updateDisplay();
+}
 
 // ============================================
 // SETUP
@@ -76,13 +151,11 @@ void setup() {
   initUSB();
   initFIDO2();                // Load FIDO2 credentials from NVS
   
-  debugPrintln("✓ All systems initialized!");
+  debugPrintln("All components initialized");
   debugPrintln("========================================");
   
-  // Show ready screen
-  currentMode = MODE_IDLE;
-  updateDisplay();
-  // LED colors are already loaded from EEPROM by initSettings() → loadLEDColors()
+  // Run boot-time health checks and gates
+  runBootChecks();
 }
 
 // ============================================
@@ -92,12 +165,22 @@ void setup() {
 void loop() {
   // Process serial commands (for configuration)
   processSerialCommands();
+
+  // If in setup-needed mode, check if a macro was configured via serial
+  if (currentMode == MODE_SETUP_NEEDED) {
+    if (hasAnyMacroConfigured()) {
+      debugPrintln("Macro configured — switching to idle");
+      currentMode = MODE_IDLE;
+    }
+  }
   
   // Update all components
   scanKeyMatrix();
   
   // Route encoder input: interactive menus take priority over volume control
-  if (currentMode == MODE_FP_DELETE_MENU || currentMode == MODE_FP_DELETE_CONFIRM
+  if (currentMode == MODE_SYSTEM_MENU) {
+    updateSystemMenu();
+  } else if (currentMode == MODE_FP_DELETE_MENU || currentMode == MODE_FP_DELETE_CONFIRM
       || currentMode == MODE_KEY_SLOT_REPLACE_MENU || currentMode == MODE_KEY_SLOT_REPLACE_CONFIRM) {
     updateFingerprintDeleteMenu();
   } else {

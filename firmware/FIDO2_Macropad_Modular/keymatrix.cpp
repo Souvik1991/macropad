@@ -6,6 +6,8 @@
 #include "config.h"
 #include "debug.h"
 #include "display.h"
+#include "encoders.h"
+#include "fingerprint.h"
 #include "keymatrix.h"
 #include "leds.h"
 #include "settings.h"
@@ -14,15 +16,17 @@
 
 bool keyStates[MATRIX_ROWS][MATRIX_COLS] = {0};
 bool lastKeyStates[MATRIX_ROWS][MATRIX_COLS] = {0};
-unsigned long lastDeletePressTime = 0;
-const unsigned long doubleTapDelay = 500;
-unsigned long lastOSSwitchPressTime = 0;
+
+// Key 9+12 long-press combo state
+static unsigned long comboStartTime = 0;
+static bool comboTriggered = false;
+static bool comboActive = false;  // true while both keys are held (suppresses macros)
+static const unsigned long COMBO_HOLD_MS = 2000;  // 2 seconds to activate
 
 void handleKeyPress(int row, int col);
 void handleKeyRelease(int row, int col);
 void executeMacro(int keyNum);
 void executeSequenceMacro(int keyNum);
-void executeHardcodedMacro(int keyNum);
 
 void initKeyMatrix() {
   debugPrint("Initializing key matrix... ");
@@ -60,6 +64,55 @@ void scanKeyMatrix() {
     
     digitalWrite(rowPins[row], HIGH);
   }
+
+  // --- Key 9+12 combo detection (after full scan so keyStates are fresh) ---
+  // Key 9 = Row 2, Col 0 | Key 12 = Row 2, Col 3
+  bool key9Held = keyStates[2][0];
+  bool key12Held = keyStates[2][3];
+
+  if (key9Held && key12Held) {
+    if (!comboTriggered) {
+      if (comboStartTime == 0) {
+        // Just started holding both keys
+        comboStartTime = millis();
+        comboActive = true;
+        debugPrintln("  Combo hold started (K9+K12)");
+      }
+
+      unsigned long held = millis() - comboStartTime;
+
+      // LED fill-up animation: light LEDs 0→4 progressively over 2 seconds
+      int ledsLit = (int)((held * NUM_LEDS) / COMBO_HOLD_MS);
+      if (ledsLit > NUM_LEDS) ledsLit = NUM_LEDS;
+      for (int i = 0; i < NUM_LEDS; i++) {
+        if (i < ledsLit) {
+          leds[i] = CRGB(0, 180, 200);  // Cyan fill
+        } else {
+          leds[i] = CRGB::Black;
+        }
+      }
+      FastLED.show();
+
+      if (held >= COMBO_HOLD_MS) {
+        // Combo activated!
+        comboTriggered = true;
+        debugPrintln("  => System Menu activated!");
+        flashAllLEDs(CRGB::Green, 150);
+        restoreSavedLEDs();
+        enterSystemMenu();
+      }
+    }
+  } else {
+    // One or both keys released
+    if (comboActive && !comboTriggered) {
+      // Released before 2s — cancel, restore LEDs
+      restoreSavedLEDs();
+      debugPrintln("  Combo cancelled (released early)");
+    }
+    comboStartTime = 0;
+    comboTriggered = false;
+    comboActive = false;
+  }
 }
 
 void handleKeyPress(int row, int col) {
@@ -81,60 +134,6 @@ void handleKeyRelease(int row, int col) {
   // Optional: handle key release events
 }
 
-void executeMacro(int keyNum) {
-  if (keyNum >= 1 && keyNum <= NUM_MACROS) {
-    MacroConfig &macro = storedMacros[keyNum - 1];
-    
-    if (macro.type == MACRO_TYPE_DISABLED) {
-      debugPrintln("  -> Macro disabled, using hardcoded fallback");
-      executeHardcodedMacro(keyNum);
-      return;
-    }
-    
-    if (macro.type == MACRO_TYPE_KEYCOMBO) {
-      uint8_t modifier = macro.modifier;
-      
-      if (modifier == 0) {
-        modifier = (currentOS == OS_MAC) ? HID_KEY_GUI_LEFT : HID_KEY_CONTROL_LEFT;
-      } else {
-        uint8_t hidMod = 0;
-        if (modifier & 1) hidMod |= HID_KEY_CONTROL_LEFT;
-        if (modifier & 2) hidMod |= HID_KEY_SHIFT_LEFT;
-        if (modifier & 4) hidMod |= HID_KEY_ALT_LEFT;
-        if (modifier & 8) hidMod |= HID_KEY_GUI_LEFT;
-        modifier = hidMod;
-      }
-      
-      sendKeyCombo(modifier, macro.keycode);
-      debugPrint("  -> Executed stored macro: Key ");
-      debugPrintln(keyNum);
-      return;
-      
-    } else if (macro.type == MACRO_TYPE_STRING) {
-      char str[6] = {0};
-      for (int i = 0; i < 5 && macro.data[i] != 0; i++) {
-        str[i] = macro.data[i];
-      }
-      sendString(str);
-      debugPrint("  -> Executed string macro: ");
-      debugPrintln(str);
-      return;
-      
-    } else if (macro.type == MACRO_TYPE_SPECIAL) {
-      executeHardcodedMacro(keyNum);
-      return;
-      
-    } else if (macro.type == MACRO_TYPE_SEQUENCE) {
-      executeSequenceMacro(keyNum);
-      debugPrint("  -> Executed sequence macro: Key ");
-      debugPrintln(keyNum);
-      return;
-    }
-  }
-  
-  executeHardcodedMacro(keyNum);
-}
-
 void executeSequenceMacro(int keyNum) {
   int osOffset = (currentOS == OS_MAC) ? 1 : 0;
   int seqAddr = EEPROM_ADDR_SEQUENCES + ((keyNum - 1) * 2 + osOffset) * MAX_SEQUENCE_LENGTH;
@@ -149,19 +148,19 @@ void executeSequenceMacro(int keyNum) {
   }
 
   if (seqLen == 0) {
-    debugPrintln("  -> No sequence defined for current OS, using fallback");
+    debugPrintln("  -> No sequence defined for current OS");
     return;
   }
-  
+
   String seq = String(sequenceStr);
   int startIdx = 0;
-  
+
   while (startIdx < seq.length()) {
     int pipeIdx = seq.indexOf('|', startIdx);
     String step = (pipeIdx > 0) ? seq.substring(startIdx, pipeIdx) : seq.substring(startIdx);
-    
+
     if (step.length() == 0) break;
-    
+
     if (step.startsWith("K:")) {
       int colon1 = 2;
       int colon2 = step.indexOf(':', colon1 + 1);
@@ -201,180 +200,170 @@ void executeSequenceMacro(int keyNum) {
         usb_kbd.keyboardRelease(0);
         delay(10);
       }
-      
+
     } else if (step.startsWith("T:")) {
       String text = step.substring(2);
       sendString(text.c_str());
-      
+
     } else if (step.startsWith("D:")) {
       int delayMs = step.substring(2).toInt();
       delayMs = constrain(delayMs, 0, 5000);
       delay(delayMs);
-      
+
     } else if (step == "R") {
       usb_kbd.keyboardRelease(0);
       delay(10);
     }
-    
+
     startIdx = (pipeIdx > 0) ? pipeIdx + 1 : seq.length();
   }
 }
 
-void executeHardcodedMacro(int keyNum) {
-  uint8_t modKey = (currentOS == OS_MAC) ? HID_KEY_GUI_LEFT : HID_KEY_CONTROL_LEFT;
-  
-  switch(keyNum) {
-    case 1:
-      if (currentOS == OS_MAC) {
-        sendKeyCombo(HID_KEY_GUI_LEFT | HID_KEY_SHIFT_LEFT, HID_KEY_4);
-        debugPrintln("  -> Screenshot (Mac: Cmd+Shift+4)");
-      } else {
-        sendKeyCombo(HID_KEY_GUI_LEFT | HID_KEY_SHIFT_LEFT, HID_KEY_S);
-        debugPrintln("  -> Screenshot (Win: Win+Shift+S)");
-      }
-      break;
-      
-    case 2:
-      sendKeyCombo(HID_KEY_CONTROL_LEFT | HID_KEY_SHIFT_LEFT, HID_KEY_M);
-      debugPrintln("  -> Mic Toggle (Ctrl+Shift+M)");
-      debugPrintln("     Note: Configure this shortcut in Zoom/Webex/GMeet");
-      break;
-      
-    case 3:
-      sendKeyCombo(HID_KEY_CONTROL_LEFT | HID_KEY_SHIFT_LEFT, HID_KEY_V);
-      debugPrintln("  -> Video Toggle (Ctrl+Shift+V)");
-      debugPrintln("     Note: Configure this shortcut in Zoom/Webex/GMeet");
-      break;
-      
-    case 4:
-      if (currentOS == OS_MAC) {
-        sendKeyCombo(HID_KEY_GUI_LEFT | HID_KEY_CONTROL_LEFT, HID_KEY_Q);
-        debugPrintln("  -> Lock Screen (Mac: Cmd+Ctrl+Q)");
-      } else {
-        sendKeyCombo(HID_KEY_GUI_LEFT, HID_KEY_L);
-        debugPrintln("  -> Lock Screen (Win: Win+L)");
-      }
-      break;
-      
-    case 5:
-      sendKeyCombo(modKey, HID_KEY_C);
-      debugPrint("  -> Copy (");
-      debugPrint(currentOS == OS_MAC ? "Cmd+C" : "Ctrl+C");
-      debugPrintln(")");
-      break;
-      
-    case 6:
-      sendKeyCombo(modKey, HID_KEY_X);
-      debugPrint("  -> Cut (");
-      debugPrint(currentOS == OS_MAC ? "Cmd+X" : "Ctrl+X");
-      debugPrintln(")");
-      break;
-      
-    case 7:
-      sendKeyCombo(modKey, HID_KEY_V);
-      debugPrint("  -> Paste (");
-      debugPrint(currentOS == OS_MAC ? "Cmd+V" : "Ctrl+V");
-      debugPrintln(")");
-      break;
-      
-    case 8:
-      if ((millis() - lastDeletePressTime) < doubleTapDelay) {
-        sendKeyCombo(HID_KEY_SHIFT_LEFT, HID_KEY_DELETE);
-        debugPrintln("  -> PERMANENT DELETE (Shift+Delete)");
-        lastDeletePressTime = 0;
-      } else {
-        sendKey(HID_KEY_DELETE);
-        debugPrintln("  -> Delete (tap again for Shift+Delete)");
-        lastDeletePressTime = millis();
-      }
-      break;
-      
-    case 9:
-      if (currentOS == OS_MAC) {
-        sendKeyCombo(HID_KEY_GUI_LEFT, HID_KEY_SPACE);
-        delay(200);
-        sendString("cursor");
-        delay(100);
-        sendKey(HID_KEY_ENTER);
-        debugPrintln("  -> Opening Cursor (Mac)");
-      } else {
-        sendKeyCombo(HID_KEY_GUI_LEFT, HID_KEY_R);
-        delay(200);
-        sendString("cursor");
-        delay(100);
-        sendKey(HID_KEY_ENTER);
-        debugPrintln("  -> Opening Cursor (Windows)");
-      }
-      break;
-      
-    case 10:
-      sendKey(HID_KEY_F12);
-      debugPrintln("  -> Inspect Element (F12)");
-      break;
-      
-    case 11:
-      if (currentOS == OS_MAC) {
-        sendKeyCombo(HID_KEY_GUI_LEFT, HID_KEY_SPACE);
-        delay(200);
-        sendString("terminal");
-        delay(100);
-        sendKey(HID_KEY_ENTER);
-        debugPrintln("  -> Opening Terminal (Mac)");
-      } else {
-        sendKeyCombo(HID_KEY_GUI_LEFT, HID_KEY_R);
-        delay(200);
-        sendString("cmd");
-        delay(100);
-        sendKey(HID_KEY_ENTER);
-        debugPrintln("  -> Opening Terminal (Windows)");
-      }
-      break;
-      
-    case 12:
-      if ((millis() - lastOSSwitchPressTime) < doubleTapDelay) {
-        toggleOSMode();
-        
-        debugPrintln();
-        debugPrintln("========================================");
-        debugPrint("  OS SWITCHED TO: ");
-        debugPrintln(currentOS == OS_MAC ? "macOS" : "Windows");
-        debugPrintln("========================================");
-        
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(SH110X_WHITE);
-        display.setCursor(0, 20);
-        display.println("OS MODE:");
-        display.setTextSize(3);
-        display.setCursor(10, 40);
-        display.println(currentOS == OS_MAC ? " MAC" : " WIN");
-        display.display();
-        
-        for (int i = 0; i < NUM_LEDS; i++) {
-          setAllLEDs(CRGB::Blue);
-          FastLED.show();
-          delay(100);
-          setAllLEDs(CRGB::Black);
-          FastLED.show();
-          delay(50);
+void executeMacro(int keyNum) {
+  // Suppress macros while the Key 9+12 combo is being held
+  if (comboActive) return;
+
+  // =====================================================
+  // Normal macro execution
+  // =====================================================
+
+  if (keyNum < 1 || keyNum > NUM_MACROS) return;
+
+  MacroConfig &macro = storedMacros[keyNum - 1];
+
+  if (macro.type == MACRO_TYPE_DISABLED) {
+    debugPrintln("  -> Key not configured");
+    return;
+  }
+
+  if (macro.type == MACRO_TYPE_KEYCOMBO) {
+    uint8_t modifier = macro.modifier;
+
+    if (modifier == 0) {
+      modifier = (currentOS == OS_MAC) ? HID_KEY_GUI_LEFT : HID_KEY_CONTROL_LEFT;
+    } else {
+      uint8_t hidMod = 0;
+      if (modifier & 1) hidMod |= HID_KEY_CONTROL_LEFT;
+      if (modifier & 2) hidMod |= HID_KEY_SHIFT_LEFT;
+      if (modifier & 4) hidMod |= HID_KEY_ALT_LEFT;
+      if (modifier & 8) hidMod |= HID_KEY_GUI_LEFT;
+      modifier = hidMod;
+    }
+
+    sendKeyCombo(modifier, macro.keycode);
+    debugPrint("  -> Executed macro: Key ");
+    debugPrintln(keyNum);
+
+  } else if (macro.type == MACRO_TYPE_STRING) {
+    char str[6] = {0};
+    for (int i = 0; i < 5 && macro.data[i] != 0; i++) {
+      str[i] = macro.data[i];
+    }
+    sendString(str);
+    debugPrint("  -> Executed string macro: ");
+    debugPrintln(str);
+
+  } else if (macro.type == MACRO_TYPE_SEQUENCE) {
+    executeSequenceMacro(keyNum);
+    debugPrint("  -> Executed sequence macro: Key ");
+    debugPrintln(keyNum);
+  }
+}
+
+// =====================================================
+// System Menu — Enter & Update (encoder-driven)
+// =====================================================
+
+static int lastSysMenuEncoderPos = 0;
+
+void enterSystemMenu() {
+  sysMenuSelection = 0;
+  sysMenuItemCount = 4;  // Toggle OS, Enroll FP, Delete FP, Exit
+  lastSysMenuEncoderPos = encoderPosition;
+  currentMode = MODE_SYSTEM_MENU;
+  updateDisplay();
+  debugPrintln("Entered System Menu");
+}
+
+void updateSystemMenu() {
+  static unsigned long lastButtonTime = 0;
+  const unsigned long debounceDelay = 300;
+
+  // --- Rotation: navigate menu items ---
+  int currentPos = encoderPosition;
+  if (currentPos != lastSysMenuEncoderPos) {
+    int diff = currentPos - lastSysMenuEncoderPos;
+    lastSysMenuEncoderPos = currentPos;
+
+    sysMenuSelection += diff;
+    if (sysMenuSelection < 0) sysMenuSelection = 0;
+    if (sysMenuSelection >= (int8_t)sysMenuItemCount) sysMenuSelection = sysMenuItemCount - 1;
+
+    updateDisplay();
+  }
+
+  // --- Button press: select action ---
+  if (digitalRead(ENCODER_SW) == LOW) {
+    if ((millis() - lastButtonTime) > debounceDelay) {
+      lastButtonTime = millis();
+
+      switch (sysMenuSelection) {
+        case 0: {
+          // Toggle OS Mode
+          toggleOSMode();
+          debugPrintln("========================================");
+          debugPrint("  OS SWITCHED TO: ");
+          debugPrintln(currentOS == OS_MAC ? "macOS" : "Windows");
+          debugPrintln("========================================");
+
+          // Brief confirmation on OLED
+          display.clearDisplay();
+          display.setTextSize(2);
+          display.setTextColor(SH110X_WHITE);
+          display.setCursor(0, 10);
+          display.println("OS MODE:");
+          display.setTextSize(3);
+          display.setCursor(10, 35);
+          display.println(currentOS == OS_MAC ? " MAC" : " WIN");
+          display.display();
+
+          // Blue flash animation
+          for (int i = 0; i < NUM_LEDS; i++) {
+            setAllLEDs(CRGB::Blue);
+            FastLED.show();
+            delay(100);
+            setAllLEDs(CRGB::Black);
+            FastLED.show();
+            delay(50);
+          }
+          delay(1000);
+
+          currentMode = MODE_IDLE;
+          restoreSavedLEDs();
+          updateDisplay();
+          break;
         }
-        
-        delay(2000);
-        updateDisplay();
-        lastOSSwitchPressTime = 0;
-      } else {
-        sendString("git pull");
-        sendKey(HID_KEY_ENTER);
-        debugPrintln("  -> Git Pull");
-        debugPrintln("     Note: Terminal must be open in git repo directory");
-        debugPrintln("     Tip: Double-tap Key 12 to switch OS mode");
-        
-        lastOSSwitchPressTime = millis();
+
+        case 1:
+          // Enroll Fingerprint
+          debugPrintln("  System Menu -> Enroll Fingerprint");
+          enrollFingerprint(0);  // Auto-assign ID
+          // enrollFingerprint sets currentMode to IDLE or appropriate state
+          break;
+
+        case 2:
+          // Delete Fingerprint (enters existing interactive menu)
+          debugPrintln("  System Menu -> Delete Fingerprint");
+          enterFingerprintDeleteMenu();
+          break;
+
+        case 3:
+          // Exit
+          debugPrintln("  System Menu -> Exit");
+          currentMode = MODE_IDLE;
+          updateDisplay();
+          break;
       }
-      break;
-      
-    default:
-      debugPrintln("  -> Macro: Not assigned");
-      break;
+    }
   }
 }

@@ -27,6 +27,9 @@
 #define OLED_RESET -1
 #define SCREEN_ADDRESS 0x3c
 
+// Setup/Configuration URL (shown on OLED when no macros are configured)
+#define SETUP_URL "macropad.local/setup"
+
 // ============================================
 // LED CONFIGURATION
 // ============================================
@@ -133,7 +136,12 @@ enum SystemMode {
   MODE_FIDO2_FP_RETRY,         // Fingerprint scan failed, retry prompt
   MODE_FIDO2_FP_TIMEOUT,       // No finger detected (timeout)
   MODE_FIDO2_FP_SENSOR_ERR,    // Sensor hardware/UART error
-  MODE_FIDO2_FP_FAILED         // All 3 fingerprint attempts failed
+  MODE_FIDO2_FP_FAILED,        // All 3 fingerprint attempts failed
+  MODE_BOOT_CHECK,             // Showing boot diagnostics screen
+  MODE_BOOT_FAIL,              // A critical component failed
+  MODE_FP_REQUIRED,            // No fingerprint enrolled - prompting enrollment
+  MODE_SETUP_NEEDED,           // No macros configured - showing setup URL
+  MODE_SYSTEM_MENU             // System settings menu (Key 9+12 combo)
 };
 
 enum OperatingSystem {
@@ -165,6 +173,8 @@ extern uint8_t keySlotMenuItemCount;  // Total items in slot replace menu
 extern uint8_t keySlotReplaceTarget;  // Slot selected for replacement
 extern bool keySlotConfirmYes;        // Confirm dialog selection
 extern uint8_t fpAuthAttempt;          // Current fingerprint auth attempt (1-3) for FIDO2
+extern int8_t sysMenuSelection;        // Highlighted item in system menu (0-based)
+extern uint8_t sysMenuItemCount;       // Total items in system menu
 
 // ============================================
 // GLOBAL OBJECTS (defined in respective .ino files)

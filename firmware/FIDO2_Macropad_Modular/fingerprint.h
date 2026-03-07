@@ -67,6 +67,7 @@ enum FpResult {
 // =====================================================
 
 void initFingerprint();
+bool isFingerprintSensorPresent();
 FpResult verifyFingerprint();
 bool enrollFingerprint(uint8_t id);
 bool deleteFingerprint(uint8_t id);

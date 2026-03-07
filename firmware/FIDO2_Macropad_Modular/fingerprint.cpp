@@ -23,9 +23,24 @@ HardwareSerial fingerprintSerial(1);
 static uint8_t fp_RxBuf[9];
 static uint8_t fp_TxBuf[9];
 static int fp_matchedUserId = 0;
+static bool fpSensorPresent = false;
 
 // Delete menu internal state
 static int lastMenuEncoderPos = 0;
+
+bool isFingerprintSensorPresent() {
+  return fpSensorPresent;
+}
+
+/**
+ * Helper: determine the correct mode to return to after enrollment
+ * completes or fails. If no fingerprints are enrolled, return to
+ * MODE_FP_REQUIRED (boot gate); otherwise MODE_IDLE.
+ */
+static SystemMode enrollReturnMode() {
+  // Quick check without wake/sleep (caller already has sensor awake or just finished)
+  return (getFingerprintCount() <= 0) ? MODE_FP_REQUIRED : MODE_IDLE;
+}
 
 // =====================================================
 // Sleep / Wake (RST pin control)
@@ -195,6 +210,7 @@ void initFingerprint() {
     debugPrintln(retries);
     delay(500);
     if (retries >= 10) {
+      fpSensorPresent = false;
       debugPrintln("FAILED - sensor not responding");
       displayMessage("FP Sensor", "NOT FOUND!");
       fpSleep();
@@ -202,6 +218,8 @@ void initFingerprint() {
       return;
     }
   }
+
+  fpSensorPresent = true;
 
   int count = getFingerprintCountInternal();
   debugPrintln("OK");
@@ -272,7 +290,7 @@ bool enrollFingerprint(uint8_t id) {
     currentMode = MODE_FP_FULL;
     updateDisplay();
     delay(3000);
-    currentMode = MODE_IDLE;
+    currentMode = enrollReturnMode();
     return false;
   }
 
@@ -300,7 +318,7 @@ bool enrollFingerprint(uint8_t id) {
     currentMode = MODE_FP_ENROLL_FAIL;
     updateDisplay();
     delay(2000);
-    currentMode = MODE_IDLE;
+    currentMode = enrollReturnMode();
     return false;
   }
   debugPrintln("  Scan 1 OK");
@@ -323,7 +341,7 @@ bool enrollFingerprint(uint8_t id) {
     currentMode = MODE_FP_ENROLL_FAIL;
     updateDisplay();
     delay(2000);
-    currentMode = MODE_IDLE;
+    currentMode = enrollReturnMode();
     return false;
   }
   debugPrintln("  Scan 2 OK");
@@ -346,7 +364,7 @@ bool enrollFingerprint(uint8_t id) {
     currentMode = MODE_FP_ENROLL_FAIL;
     updateDisplay();
     delay(2000);
-    currentMode = MODE_IDLE;
+    currentMode = enrollReturnMode();
     return false;
   }
 
@@ -357,7 +375,7 @@ bool enrollFingerprint(uint8_t id) {
   currentMode = MODE_FP_ENROLL_OK;
   updateDisplay();
   delay(2000);
-  currentMode = MODE_IDLE;
+  currentMode = enrollReturnMode();
   return true;
 }
 
