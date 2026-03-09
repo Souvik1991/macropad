@@ -18,9 +18,9 @@
  * - commands.h/cpp    - Serial command parser
  * - debug.h/cpp       - Debug output utilities
  * 
- * Author: [Your Name]
+ * Author: Souvik Maity + Cursor AI
  * Version: 2.0.0 (Modular)
- * Date: 2024
+ * Date: 2026
  */
 
 #include "config.h"
@@ -37,10 +37,12 @@
 #include "settings.h"
 #include "usb_hid.h"
 
+#include <esp_bt.h>
+#include <esp_wifi.h>
+
 // ============================================
 // GLOBAL STATE
 // ============================================
-
 SystemMode currentMode = MODE_IDLE;
 OperatingSystem currentOS = OS_WINDOWS;  // Change to OS_MAC if using Mac
 float volumeLevel = 50.0f;
@@ -58,7 +60,6 @@ uint8_t sysMenuItemCount = 4;    // Total items: Toggle OS, Enroll FP, Delete FP
 // ============================================
 // BOOT HEALTH CHECK
 // ============================================
-
 void runBootChecks() {
   // --- Step 1: Show health check diagnostics ---
   currentMode = MODE_BOOT_CHECK;
@@ -89,7 +90,40 @@ void runBootChecks() {
     debugPrintln("Boot failure acknowledged. Continuing...");
   }
 
-  // --- Step 3: Fingerprint enrollment gate ---
+  // --- Step 3: ATECC provisioning gate (one-time setup) ---
+  if (ateccOk && !isConfigLocked()) {
+    debugPrintln("ATECC config unlocked — entering provisioning gate");
+    currentMode = MODE_ATECC_SETUP_NEEDED;
+    updateDisplay();
+
+    bool provisioned = false;
+    while (!provisioned) {
+      if (digitalRead(ENCODER_SW) == LOW) {
+        delay(300);  // debounce
+        debugPrintln("User pressed encoder — provisioning ATECC...");
+
+        displayMessage("Configuring...", "Please wait");
+        bool cfgOk = configureDevice();
+        bool lockOk = cfgOk && lockConfiguration();
+
+        if (lockOk) {
+          debugPrintln("ATECC provisioning complete");
+          displayMessage("Done!", "Config locked");
+          delay(1500);
+          provisioned = true;
+        } else {
+          debugPrintln("ATECC provisioning failed");
+          currentMode = MODE_ATECC_PROVISIONING_FAIL;
+          updateDisplay();
+          delay(500);  // debounce before retry
+        }
+      }
+      delay(50);
+    }
+    debugPrintln("ATECC provisioning gate passed");
+  }
+
+  // --- Step 4: Fingerprint enrollment gate ---
   if (fpOk) {
     int fpCount = getFingerprintCount();
     if (fpCount <= 0) {
@@ -114,7 +148,7 @@ void runBootChecks() {
     }
   }
 
-  // --- Step 4: Check macro configuration ---
+  // --- Step 5: Check macro configuration ---
   if (!hasAnyMacroConfigured()) {
     debugPrintln("No macros configured — showing setup URL");
     currentMode = MODE_SETUP_NEEDED;
@@ -131,7 +165,6 @@ void runBootChecks() {
 // ============================================
 // SETUP
 // ============================================
-
 void setup() {
   // ─── CRITICAL: HID interfaces must be registered BEFORE Serial.begin() ───
   // On ESP32-S3 with TinyUSB, Serial.begin() triggers USB stack enumeration.
@@ -149,7 +182,14 @@ void setup() {
   
   // Wait for USB mount now that Serial is active
   waitUSBReady();
-  
+
+  // Disable WiFi and Bluetooth (not needed for USB HID macropad; saves power and reduces attack surface)
+  esp_bt_controller_disable();
+  esp_bt_controller_deinit();
+  esp_wifi_stop();
+  esp_wifi_deinit();
+  debugPrintln("WiFi and Bluetooth disabled");
+
   // Initialize all components
   initSettings();      // Load saved settings first
   initDisplay();
@@ -170,7 +210,6 @@ void setup() {
 // ============================================
 // MAIN LOOP
 // ============================================
-
 void loop() {
   // Process serial commands (for configuration)
   processSerialCommands();
@@ -205,4 +244,3 @@ void loop() {
   
   delay(10);  // 100Hz update rate
 }
-

@@ -162,16 +162,27 @@ void sendCTAPError(uint32_t cid, uint8_t errCode) {
   sendCTAPHIDResponse(cid, 0xBF, p, 1);  // CTAPHID_ERROR = 0xBF
 }
 
-// ─── Drain stale RX packets ──────────────────────────────────────────────
+// ─── Drain stale RX packets (CID-aware) ───────────────────────────────────
+// Only drains packets for currentCid; leaves packets for other CIDs (e.g.
+// user retry with new connection) intact so they can be processed next loop.
 
-bool drainStalePackets() {
+// Only drains CANCEL (0x91) packets for currentCid — leaves other requests
+// (e.g. second GetAssertion) for normal processing. Matches test behavior.
+bool drainStalePackets(uint32_t currentCid) {
   bool cancelled = false;
   while (rx_tail != rx_head) {
-    uint16_t len = rx_queue[rx_tail].len;
-    if (len >= 5 && rx_queue[rx_tail].data[4] == 0x91) {
-      cancelled = true;
-      debugPrintln("[FIDO2] CANCEL found in stale queue");
+    if (rx_queue[rx_tail].len < 5) {
+      rx_tail = (rx_tail + 1) % RX_QUEUE_DEPTH;
+      continue;
     }
+    uint32_t cid = ((uint32_t)rx_queue[rx_tail].data[0] << 24) |
+                   ((uint32_t)rx_queue[rx_tail].data[1] << 16) |
+                   ((uint32_t)rx_queue[rx_tail].data[2] << 8) |
+                   (uint32_t)rx_queue[rx_tail].data[3];
+    if (cid != currentCid) break;
+    if (rx_queue[rx_tail].data[4] != 0x91) break;  // Not CANCEL — leave for normal processing
+    cancelled = true;
+    debugPrintln("[FIDO2] CANCEL found in stale queue");
     rx_tail = (rx_tail + 1) % RX_QUEUE_DEPTH;
   }
   return cancelled;

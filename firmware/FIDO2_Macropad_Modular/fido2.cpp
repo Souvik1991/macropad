@@ -36,11 +36,21 @@ static struct {
 
 static uint32_t nextCID = 0x00000001;
 
+// Session: skip fingerprint for duplicate GetAssertion (same rpId) within 5 seconds
+#define GET_ASSERTION_SESSION_MS  5000
+static uint8_t  lastGetAssertionRpIdHash[32] = {0};
+static uint32_t lastGetAssertionTime = 0;
+
 // ─── Initialization ──────────────────────────────────────────────────────
 
 void initFIDO2() {
   debugPrintln("Initializing FIDO2 credential store...");
   cred_load();
+}
+
+// Reset reassembly state (test does this when draining). Call after drainStalePackets on abort.
+static void resetCtapReassembly() {
+  ctap_asm.active = false;
 }
 
 // ─── CTAPHID command handlers ─────────────────────────────────────────────
@@ -99,7 +109,16 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
     // Start fingerprint verification (blocking call, up to 5s timeout in sensor)
     FpResult fpResult = verifyFingerprint();
 
-    // Check for CANCEL from host while we were scanning
+    // --- Handle each result type ---
+    // IMPORTANT: Check FP_MATCH first. If user matched, succeed even if CANCEL
+    // arrived (host may have timed out but user completed auth — send assertion).
+    if (fpResult == FP_MATCH) {
+      debugPrintf("[FIDO2] Fingerprint matched on attempt %d\n", attempt);
+      fpAuthAttempt = 0;
+      return true;
+    }
+
+    // Check for CANCEL from host (only when we didn't match — if matched, we succeeded above)
     if (rx_tail != rx_head) {
       int peek = rx_tail;
       if (rx_queue[peek].len >= 5 && rx_queue[peek].data[4] == 0x91) {
@@ -110,14 +129,6 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
         updateDisplay();
         return false;
       }
-    }
-
-    // --- Handle each result type ---
-
-    if (fpResult == FP_MATCH) {
-      debugPrintf("[FIDO2] Fingerprint matched on attempt %d\n", attempt);
-      fpAuthAttempt = 0;
-      return true;
     }
 
     if (fpResult == FP_SENSOR_ERROR) {
@@ -209,7 +220,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   fidoBusy = true;
   if (!waitForFingerprintAuth(cid, FP_AUTH_TIMEOUT_MS)) {
     fidoBusy = false;
-    drainStalePackets();
+    drainStalePackets(cid);
     currentMode = MODE_FIDO2_ERROR;
     updateDisplay();
     delay(1500);
@@ -220,7 +231,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   }
 
   // Check for CANCEL during fingerprint
-  if (drainStalePackets()) {
+  if (drainStalePackets(cid)) {
     fidoBusy = false;
     currentMode = MODE_IDLE;
     updateDisplay();
@@ -417,37 +428,12 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   debugPrintln("[FIDO2] === GetAssertion ===");
   if (bcnt < 2) { sendCTAPError(cid, CTAP2_ERR_INVALID_CBOR); return; }
 
-  // --- Step 1: Fingerprint authentication (3 retries) ---
   fidoBusy = true;
-  if (!waitForFingerprintAuth(cid, FP_AUTH_TIMEOUT_MS)) {
-    fidoBusy = false;
-    drainStalePackets();
-    currentMode = MODE_FIDO2_ERROR;
-    updateDisplay();
-    delay(1500);
-    currentMode = MODE_IDLE;
-    updateDisplay();
-    sendCTAPError(cid, CTAP2_ERR_OPERATION_DENIED);
-    return;
-  }
-
-  // Check for CANCEL
-  if (drainStalePackets()) {
-    fidoBusy = false;
-    currentMode = MODE_IDLE;
-    updateDisplay();
-    sendCTAPError(cid, 0x2D);
-    return;
-  }
-
-  // Show "processing" on OLED
-  currentMode = MODE_FIDO2_VERIFYING;
-  updateDisplay();
 
   const uint8_t* cbor    = payload + 1;
   size_t         cborLen = bcnt - 1;
 
-  // --- Step 2: Parse rpId (key 0x01) ---
+  // --- Parse rpId, clientDataHash, find credential FIRST (before fingerprint) ---
   char rpId[128] = {};
   {
     const uint8_t* v; size_t va;
@@ -461,7 +447,6 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   }
   debugPrintf("  rpId: %s\n", rpId);
 
-  // --- Step 3: Parse clientDataHash (key 0x02) ---
   uint8_t clientDataHash[32];
   {
     const uint8_t* v; size_t va;
@@ -474,7 +459,6 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     }
   }
 
-  // --- Step 4: Find credential (allowList first, then rpIdHash fallback) ---
   uint8_t rpIdHash[32];
   if (!computeSHA256((uint8_t*)rpId, strlen(rpId), rpIdHash)) {
     debugPrintln("  ERR: SHA-256 failed");
@@ -485,8 +469,6 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   }
 
   Cred* cred = nullptr;
-
-  // Try allowList (key 0x03) first
   const uint8_t* arr; size_t arrLen;
   if (cbor_map_find_uint(cbor, cborLen, 0x03, &arr, &arrLen)) {
     uint8_t maj; size_t n;
@@ -504,7 +486,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
       }
     }
   }
-  if (!cred) cred = cred_find_by_rpidhash(rpIdHash);  // fallback
+  if (!cred) cred = cred_find_by_rpidhash(rpIdHash);
 
   if (!cred) {
     debugPrintln("  ERR: no matching credential");
@@ -514,6 +496,37 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
+
+  // Session: skip fingerprint if user just authenticated for same rpId (sites send 2 requests)
+  bool fpSkipped = (memcmp(rpIdHash, lastGetAssertionRpIdHash, 32) == 0 &&
+                    (millis() - lastGetAssertionTime) < GET_ASSERTION_SESSION_MS);
+  if (fpSkipped) {
+    debugPrintln("  [Session] Skipping fingerprint (recent auth for same site)");
+  } else {
+    if (!waitForFingerprintAuth(cid, FP_AUTH_TIMEOUT_MS)) {
+      fidoBusy = false;
+      drainStalePackets(cid);
+      resetCtapReassembly();
+      currentMode = MODE_FIDO2_ERROR;
+      updateDisplay();
+      delay(1500);
+      currentMode = MODE_IDLE;
+      updateDisplay();
+      sendCTAPError(cid, CTAP2_ERR_OPERATION_DENIED);
+      return;
+    }
+    if (drainStalePackets(cid)) {
+      fidoBusy = false;
+      resetCtapReassembly();
+      currentMode = MODE_IDLE;
+      updateDisplay();
+      sendCTAPError(cid, 0x2D);
+      return;
+    }
+  }
+
+  currentMode = MODE_FIDO2_VERIFYING;
+  updateDisplay();
 
   debugPrint("  credId: ");
   for (int i = 0; i < CRED_ID_LEN; i++) debugPrintf("%02X", cred->id[i]);
@@ -571,14 +584,23 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   fidoBusy = false;
   debugPrintf("[FIDO2] GetAssertion DONE ✓ (signCount=%d)\n", cred->signCount);
 
-  // Show success on OLED
-  currentMode = MODE_FIDO2_SUCCESS;
-  updateDisplay();
-  setLEDPattern(PATTERN_ACTIVE);
-  delay(2000);
-  currentMode = MODE_IDLE;
-  updateDisplay();
-  setLEDPattern(PATTERN_IDLE);
+  // Update session so duplicate GetAssertion (same rpId) can skip fingerprint
+  memcpy(lastGetAssertionRpIdHash, rpIdHash, 32);
+  lastGetAssertionTime = millis();
+
+  // If we used session skip, the second response just went out — both responses
+  // are now sent. Show success. If we did fingerprint, return immediately so the
+  // second request (in queue) gets processed before any delay — website needs
+  // both responses quickly.
+  if (fpSkipped) {
+    currentMode = MODE_FIDO2_SUCCESS;
+    updateDisplay();
+    setLEDPattern(PATTERN_ACTIVE);
+    delay(2000);
+    currentMode = MODE_IDLE;
+    updateDisplay();
+    setLEDPattern(PATTERN_IDLE);
+  }
 }
 
 // ─── CTAPHID_CBOR dispatcher ─────────────────────────────────────────────
@@ -598,7 +620,9 @@ static void handleCBOR(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
 }
 
 // ─── Main loop: Check for FIDO2 requests ──────────────────────────────────
-// Drains the FIDO2 RX ring buffer, reassembles CTAPHID packets, and dispatches.
+// Reassembles CTAPHID packets and dispatches. Process ONE complete message per
+// call (like the test) so there's a natural gap between responses — the test
+// has human delay (BOOT button) between the two GetAssertions.
 
 void checkFIDO2Requests() {
   while (rx_tail != rx_head) {
@@ -618,6 +642,15 @@ void checkFIDO2Requests() {
       uint16_t first = pkt.len > 7 ? (uint16_t)(pkt.len-7) : 0;
       if (bcnt > CTAP_MAX_PAYLOAD) bcnt = CTAP_MAX_PAYLOAD;
       if (first > bcnt) first = bcnt;
+
+      // INIT is always single-packet; handle it without touching ctap_asm so
+      // we don't corrupt an in-progress multi-packet reassembly (e.g. GetAssertion)
+      if (b4 == CTAPHID_INIT && first >= bcnt) {
+        debugPrintf("\n[FIDO2] PKT CID=0x%08X CMD=0x%02X BCNT=%d\n", cid, b4, bcnt);
+        handleInit(cid, pkt.data + 7, bcnt);
+        return;
+      }
+
       ctap_asm = {cid, b4, bcnt, first, {}, true};
       memcpy(ctap_asm.buf, pkt.data+7, first);
       debugPrintf("\n[FIDO2] PKT CID=0x%08X CMD=0x%02X BCNT=%d\n", cid, b4, bcnt);
@@ -631,6 +664,7 @@ void checkFIDO2Requests() {
           case 0x91: debugPrintln("[FIDO2] CTAPHID_CANCEL"); break;
           default: sendCTAPError(cid, CTAP1_ERR_INVALID_CMD);
         }
+        return;  // One message per call — let main loop run before next
       }
     } else if (ctap_asm.active && cid == ctap_asm.cid) {
       // Continuation packet
@@ -650,6 +684,7 @@ void checkFIDO2Requests() {
           case CTAPHID_MSG:  handleMsg (dc);                    break;
           default: sendCTAPError(dc, CTAP1_ERR_INVALID_CMD);
         }
+        return;  // One message per call
       }
     }
   }

@@ -9,52 +9,52 @@
 
 ## ⚡ **QUICK PIN REFERENCE (CORRECTED)**
 
-| GPIO | Component | Function |
-|------|-----------|----------|
-| **GPIO3** | I²C SDA | OLED + ATECC608A |
-| **GPIO4** | I²C SCL | OLED + ATECC608A |
-| **GPIO5** | Matrix Row 1 | Keys 1-4 |
-| **GPIO6** | Matrix Row 2 | Keys 5-8 |
-| **GPIO9** | Matrix Row 3 | Keys 9-12 |
-| **GPIO10** | Encoder CLK | Volume rotation |
-| **GPIO11** | Encoder DT | Volume direction |
-| **GPIO12** | Encoder SW | Mute button |
-| **GPIO13** | Matrix Col 1 | All keys |
-| **GPIO14** | Matrix Col 2 | All keys |
-| **GPIO15** | Matrix Col 3 | All keys |
-| **GPIO16** | Matrix Col 4 | All keys |
-| **GPIO17** | LED Data | 5× WS2812B (via shifter) |
-| **GPIO18** | Fingerprint RST | Sleep/wake control (output) |
-| **GPIO8** | Fingerprint WAKE | Finger detect (input, interrupt) |
-| **GPIO38** | UART1 RX | Fingerprint TX (U1RXD) |
-| **GPIO39** | UART1 TX | Fingerprint RX (U1TXD) |
+| # | GPIO | Component | Function |
+|---|------|-----------|----------|
+| 1 | **GPIO3** | I²C SDA | OLED + ATECC608A |
+| 2 | **GPIO4** | I²C SCL | OLED + ATECC608A |
+| 3 | **GPIO5** | Matrix Row 1 | Keys 1-4 |
+| 4 | **GPIO6** | Matrix Row 2 | Keys 5-8 |
+| 5 | **GPIO9** | Matrix Row 3 | Keys 9-12 |
+| 6 | **GPIO10** | Encoder CLK | Volume rotation |
+| 7 | **GPIO11** | Encoder DT | Volume direction |
+| 8 | **GPIO12** | Encoder SW | Mute button |
+| 9 | **GPIO13** | Matrix Col 1 | All keys |
+| 10 | **GPIO14** | Matrix Col 2 | All keys |
+| 11 | **GPIO15** | Matrix Col 3 | All keys |
+| 12 | **GPIO16** | Matrix Col 4 | All keys |
+| 13 | **GPIO17** | LED Data | 5× WS2812B (via shifter) |
+| 14 | **GPIO18** | Fingerprint RST | Sleep/wake control (output) |
+| 15 | **GPIO8** | Fingerprint WAKE | Finger detect (input, interrupt) |
+| 16 | **GPIO38** | UART1 RX | Fingerprint TX (U1RXD) |
+| 17 | **GPIO39** | UART1 TX | Fingerprint RX (U1TXD) |
 
 **❌ Unavailable:** GPIO7 (reserved for I2C power, not on header), GPIO21/33 (onboard NeoPixel)
 
 
 ### Pin Reference Table
 
-| Arduino Label | GPIO | Notes |
-|---------------|------|-------|
-| SDA | 3 | I²C Data (STEMMA QT) |
-| SCL | 4 | I²C Clock (STEMMA QT) |
-| A0 | 18 | Analog / Digital |
-| A1 | 17 | Analog / Digital |
-| A2 | 16 | Analog / Digital |
-| A3 | 15 | Analog / Digital |
-| A4 | 14 | Analog / Digital |
-| A5 | 8 | Analog / Digital |
-| D5 | 5 | Digital |
-| D6 | 6 | Digital |
-| D9 | 9 | Digital |
-| D10 | 10 | Digital |
-| D11 | 11 | Digital |
-| D12 | 12 | Digital |
-| D13 | 13 | Digital |
-| **RX** | **38** | UART1 RX (U1RXD) |
-| **TX** | **39** | UART1 TX (U1TXD) |
-| NEOPIXEL | 33 | Onboard RGB LED |
-| NEOPIXEL_POWER | 21 | Onboard NeoPixel enable |
+| # | Arduino Label | GPIO | Notes |
+|---|---------------|------|-------|
+| 1 | SDA | 3 | I²C Data (STEMMA QT) |
+| 2 | SCL | 4 | I²C Clock (STEMMA QT) |
+| 3 | A0 | 18 | Analog / Digital |
+| 4 | A1 | 17 | Analog / Digital |
+| 5 | A2 | 16 | Analog / Digital |
+| 6 | A3 | 15 | Analog / Digital |
+| 7 | A4 | 14 | Analog / Digital |
+| 8 | A5 | 8 | Analog / Digital |
+| 9 | D5 | 5 | Digital |
+| 10 | D6 | 6 | Digital |
+| 11 | D9 | 9 | Digital |
+| 12 | D10 | 10 | Digital |
+| 13 | D11 | 11 | Digital |
+| 14 | D12 | 12 | Digital |
+| 15 | D13 | 13 | Digital |
+| 16 | **RX** | **38** | UART1 RX (U1RXD) |
+| 17 | **TX** | **39** | UART1 TX (U1TXD) |
+| — | NEOPIXEL | 33 | Onboard RGB LED |
+| — | NEOPIXEL_POWER | 21 | Onboard NeoPixel enable |
 
 ---
 
@@ -723,29 +723,29 @@ Only 5 wires needed — no external resistors.
 
 ### ESP32-S3 Feather GPIO Allocation (ACTIVE)
 
-| ESP32-S3 Pin | Function | Component | Direction | Notes |
-|--------------|----------|-----------|-----------|-------|
-| **USB D+/D-** | USB OTG | Native USB | Bidir | HID Keyboard + FIDO2 CTAP2 |
-| **3V** | Power Out | All 3.3V components | Output | 500mA max from regulator |
-| **GND** | Ground | Common ground | — | All components share |
-| **VBUS** | 5V In | USB power | Input | Powers Feather + LEDs |
-| **GPIO3 (SDA)** | I²C Data | OLED + ATECC608A | Bidir | Shared bus, 100kHz |
-| **GPIO4 (SCL)** | I²C Clock | OLED + ATECC608A | Output | Shared bus, 100kHz |
-| **GPIO5** | Key Matrix | Row 0 (Keys 1-4) | Output | Active low scanning |
-| **GPIO6** | Key Matrix | Row 1 (Keys 5-8) | Output | Active low scanning |
-| **GPIO8 (A5)** | Fingerprint | WAKE (finger detect) | Input | Interrupt on RISING |
-| **GPIO9** | Key Matrix | Row 2 (Keys 9-12) | Output | Active low scanning |
-| **GPIO10** | Encoder | CLK (rotation) | Input | Internal pull-up |
-| **GPIO11** | Encoder | DT (direction) | Input | Internal pull-up |
-| **GPIO12** | Encoder | SW (mute button) | Input | Internal pull-up |
-| **GPIO13** | Key Matrix | Col 0 (Keys 1,5,9) | Input | Internal pull-up |
-| **GPIO14 (A4)** | Key Matrix | Col 1 (Keys 2,6,10) | Input | Internal pull-up |
-| **GPIO15 (A3)** | Key Matrix | Col 2 (Keys 3,7,11) | Input | Internal pull-up |
-| **GPIO16 (A2)** | Key Matrix | Col 3 (Keys 4,8,12) | Input | Internal pull-up |
-| **GPIO17 (A1)** | LED Data | WS2812B (via shifter) | Output | 800kHz RMT |
-| **GPIO18 (A0)** | Fingerprint | RST (sleep/wake) | Output | LOW=sleep, HIGH=active |
-| **GPIO38 (RX)** | UART1 RX | Fingerprint TX | Input | 19200 baud |
-| **GPIO39 (TX)** | UART1 TX | Fingerprint RX | Output | 19200 baud |
+| # | ESP32-S3 Pin | Function | Component | Direction | Notes |
+|---|--------------|----------|-----------|-----------|-------|
+| 1 | **USB D+/D-** | USB OTG | Native USB | Bidir | HID Keyboard + FIDO2 CTAP2 |
+| 2 | **3V** | Power Out | All 3.3V components | Output | 500mA max from regulator |
+| 3 | **GND** | Ground | Common ground | — | All components share |
+| 4 | **VBUS** | 5V In | USB power | Input | Powers Feather + LEDs |
+| 5 | **GPIO3 (SDA)** | I²C Data | OLED + ATECC608A | Bidir | Shared bus, 100kHz |
+| 6 | **GPIO4 (SCL)** | I²C Clock | OLED + ATECC608A | Output | Shared bus, 100kHz |
+| 7 | **GPIO5** | Key Matrix | Row 0 (Keys 1-4) | Output | Active low scanning |
+| 8 | **GPIO6** | Key Matrix | Row 1 (Keys 5-8) | Output | Active low scanning |
+| 9 | **GPIO8 (A5)** | Fingerprint | WAKE (finger detect) | Input | Interrupt on RISING |
+| 10 | **GPIO9** | Key Matrix | Row 2 (Keys 9-12) | Output | Active low scanning |
+| 11 | **GPIO10** | Encoder | CLK (rotation) | Input | Internal pull-up |
+| 12 | **GPIO11** | Encoder | DT (direction) | Input | Internal pull-up |
+| 13 | **GPIO12** | Encoder | SW (mute button) | Input | Internal pull-up |
+| 14 | **GPIO13** | Key Matrix | Col 0 (Keys 1,5,9) | Input | Internal pull-up |
+| 15 | **GPIO14 (A4)** | Key Matrix | Col 1 (Keys 2,6,10) | Input | Internal pull-up |
+| 16 | **GPIO15 (A3)** | Key Matrix | Col 2 (Keys 3,7,11) | Input | Internal pull-up |
+| 17 | **GPIO16 (A2)** | Key Matrix | Col 3 (Keys 4,8,12) | Input | Internal pull-up |
+| 18 | **GPIO17 (A1)** | LED Data | WS2812B (via shifter) | Output | 800kHz RMT |
+| 19 | **GPIO18 (A0)** | Fingerprint | RST (sleep/wake) | Output | LOW=sleep, HIGH=active |
+| 20 | **GPIO38 (RX)** | UART1 RX | Fingerprint TX | Input | 19200 baud |
+| 21 | **GPIO39 (TX)** | UART1 TX | Fingerprint RX | Output | 19200 baud |
 
 **GPIO Usage Summary:**
 - **Used:** 17 GPIO pins + USB = 18 functions

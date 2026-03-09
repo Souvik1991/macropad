@@ -144,6 +144,8 @@ enum SystemMode {
   MODE_FIDO2_FP_FAILED,        // All 3 fingerprint attempts failed
   MODE_BOOT_CHECK,             // Showing boot diagnostics screen
   MODE_BOOT_FAIL,              // A critical component failed
+  MODE_ATECC_SETUP_NEEDED,     // ATECC config unlocked - prompting one-time provision
+  MODE_ATECC_PROVISIONING_FAIL,// ATECC provisioning failed - retry prompt
   MODE_FP_REQUIRED,            // No fingerprint enrolled - prompting enrollment
   MODE_SETUP_NEEDED,           // No macros configured - showing setup URL
   MODE_SYSTEM_MENU,            // System settings menu (Key 9+12 combo)

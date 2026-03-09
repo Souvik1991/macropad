@@ -18,6 +18,7 @@
 #define CTAP2_ERR_UNSUPPORTED_ALG 0x26
 #define CTAP2_ERR_OPERATION_DENIED 0x27
 #define CTAP2_ERR_KEY_STORE_FULL  0x28
+#define CTAP2_ERR_PIN_NOT_SET     0x30  // Used for Windows SelectDevice probe (device selected)
 #define CTAP2_ERR_NO_CREDENTIALS  0x2E
 
 // ─── CTAP2 command IDs ───────────────────────────────────────────────────

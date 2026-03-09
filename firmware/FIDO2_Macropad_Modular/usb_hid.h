@@ -43,9 +43,10 @@ bool sendCTAPHIDLarge(uint32_t cid, uint8_t cmd,
 // Send CTAPHID error
 void sendCTAPError(uint32_t cid, uint8_t errCode);
 
-// Drain stale RX packets (after blocking operations like fingerprint scan).
-// Returns true if a CANCEL was found among the stale packets.
-bool drainStalePackets();
+// Drain stale RX packets for the given CID (after blocking operations like
+// fingerprint scan). Only drains CANCEL (0x91) packets; leaves other requests
+// for normal processing. Returns true if a CANCEL was found.
+bool drainStalePackets(uint32_t currentCid);
 
 // ─── FIDO2 RX ring buffer access ─────────────────────────────────────────
 #define CTAP_PACKET_SIZE 64

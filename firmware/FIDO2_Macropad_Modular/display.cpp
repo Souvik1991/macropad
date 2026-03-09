@@ -41,7 +41,7 @@ void initDisplay() {
 }
 
 // Helper: draw text centered horizontally on screen
-static void centerText(const __FlashStringHelper* text, int y, int textSize = 1) {
+void centerText(const __FlashStringHelper* text, int y, int textSize) {
   int16_t x1, y1;
   uint16_t w, h;
   display.setTextSize(textSize);
@@ -93,6 +93,8 @@ void displayFPDeleteConfirmScreen();
 void displayVolumeOverlay();
 void displayBootCheckScreen();
 void displayBootFailScreen();
+void displayATECCSetupNeededScreen();
+void displayATECCProvisioningFailScreen();
 void displayFPRequiredScreen();
 void displaySetupNeededScreen();
 void displaySystemMenuScreen();
@@ -177,6 +179,12 @@ void updateDisplay() {
       break;
     case MODE_BOOT_FAIL:
       displayBootFailScreen();
+      break;
+    case MODE_ATECC_SETUP_NEEDED:
+      displayATECCSetupNeededScreen();
+      break;
+    case MODE_ATECC_PROVISIONING_FAIL:
+      displayATECCProvisioningFailScreen();
       break;
     case MODE_FP_REQUIRED:
       displayFPRequiredScreen();
@@ -1040,6 +1048,49 @@ void displayBootFailScreen() {
     display.setCursor(4, 56);
     display.println(F("FP Sensor missing"));
   }
+}
+
+// =====================================================
+// ATECC Setup Needed Screen (boot provisioning gate)
+// =====================================================
+
+void displayATECCSetupNeededScreen() {
+  display.setTextSize(1);
+
+  display.setCursor(4, 14);
+  display.println(F("ATECC SETUP"));
+  display.setCursor(4, 24);
+  display.println(F("REQUIRED"));
+
+  // Lock/safe icon (simple)
+  int iconX = 85;
+  int iconY = 14;
+  display.drawRoundRect(iconX, iconY, 22, 18, 4, SH110X_WHITE);
+  display.fillRect(iconX + 8, iconY - 2, 6, 4, SH110X_WHITE);
+  display.drawRect(iconX + 10, iconY + 4, 2, 6, SH110X_WHITE);
+
+  display.setCursor(4, 40);
+  display.println(F("Press encoder to"));
+  display.setCursor(4, 50);
+  display.println(F("provision (1-time)"));
+}
+
+// =====================================================
+// ATECC Provisioning Fail Screen (retry prompt)
+// =====================================================
+
+void displayATECCProvisioningFailScreen() {
+  display.setTextSize(1);
+
+  display.setCursor(4, 14);
+  display.println(F("PROVISIONING"));
+  display.setCursor(4, 24);
+  display.println(F("FAILED"));
+
+  display.setCursor(4, 40);
+  display.println(F("Press encoder to"));
+  display.setCursor(4, 50);
+  display.println(F("retry"));
 }
 
 // =====================================================
