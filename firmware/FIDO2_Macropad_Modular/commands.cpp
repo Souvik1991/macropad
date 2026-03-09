@@ -121,9 +121,9 @@ void handleSequenceCommand(String args) {
   }
 
   int osOffset = 0;
-  if (osStr == "mac") {
+  if (osStr.equalsIgnoreCase("mac")) {
     osOffset = 1;
-  } else if (osStr == "win") {
+  } else if (osStr.equalsIgnoreCase("win")) {
     osOffset = 0;
   } else {
     debugPrintln("ERROR: OS must be 'win' or 'mac'");
@@ -137,7 +137,7 @@ void handleSequenceCommand(String args) {
     EEPROM.write(seqAddr + i, sequenceStr[i]);
   }
   EEPROM.write(seqAddr + len, 0);
-  EEPROM.commit();
+  commitEEPROM("handleSequenceCommand");
 
   debugPrint("OK: Sequence saved for Key ");
   debugPrint(keyNum);
@@ -281,6 +281,25 @@ void handleListCommand() {
     }
     
     debugPrintln();
+  }
+  
+  debugPrintln("\n=== SEQUENCES ===");
+  for (int i = 0; i < NUM_MACROS; i++) {
+    if (storedMacros[i].type == MACRO_TYPE_SEQUENCE) {
+      char seqBuf[MAX_SEQUENCE_LENGTH + 1];
+      loadSequence(i + 1, 0, seqBuf, sizeof(seqBuf));  // Windows (osOffset=0)
+      if (seqBuf[0] != 0) {
+        debugPrint(i + 1);
+        debugPrint(":win:");
+        debugPrintln(seqBuf);
+      }
+      loadSequence(i + 1, 1, seqBuf, sizeof(seqBuf));  // Mac (osOffset=1)
+      if (seqBuf[0] != 0) {
+        debugPrint(i + 1);
+        debugPrint(":mac:");
+        debugPrintln(seqBuf);
+      }
+    }
   }
   
   debugPrintln("\n=== LED COLORS ===");

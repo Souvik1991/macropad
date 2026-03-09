@@ -13,10 +13,6 @@
 #include "usb_hid.h"
 #include <string.h>
 
-// ─── Report IDs for combined Keyboard+Consumer interface ─────────────────
-#define RID_KEYBOARD 1
-#define RID_CONSUMER 2
-
 // ─── HID report descriptors ──────────────────────────────────────────────
 
 // Combined: Keyboard (Report ID 1) + Consumer Control (Report ID 2)

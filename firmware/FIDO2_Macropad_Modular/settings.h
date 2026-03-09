@@ -8,6 +8,8 @@
 
 #include "config.h"
 
+bool commitEEPROM(const char* context);
+
 void initSettings();
 void saveOSMode(OperatingSystem os);
 void loadOSMode();
@@ -26,7 +28,11 @@ void initDefaultMacros();
 void loadMacros();
 void saveKeyName(int keyNum, const char* name);
 void loadKeyName(int keyNum, char* name, int maxLen);
+void loadSequence(int keyNum, int osOffset, char* buf, int bufSize);
 void initDefaultKeyNames();
 bool hasAnyMacroConfigured();
+
+// Reset all EEPROM settings to factory defaults (macros, LEDs, key names, sequences)
+void resetAllSettings();
 
 #endif // SETTINGS_H

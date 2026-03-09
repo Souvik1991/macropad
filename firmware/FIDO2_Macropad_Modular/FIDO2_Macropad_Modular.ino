@@ -189,6 +189,8 @@ void loop() {
   // Route encoder input: interactive menus take priority over volume control
   if (currentMode == MODE_SYSTEM_MENU) {
     updateSystemMenu();
+  } else if (currentMode == MODE_SYSTEM_RESET_CONFIRM) {
+    updateSystemResetConfirm();
   } else if (currentMode == MODE_FP_DELETE_MENU || currentMode == MODE_FP_DELETE_CONFIRM
       || currentMode == MODE_KEY_SLOT_REPLACE_MENU || currentMode == MODE_KEY_SLOT_REPLACE_CONFIRM) {
     updateFingerprintDeleteMenu();
@@ -197,6 +199,7 @@ void loop() {
   }
   
   checkFIDO2Requests();
+  tickSequenceMacro();  // Non-blocking sequence macro continuation (millis-based delays)
   updateDisplay();
   updateLEDs();
   

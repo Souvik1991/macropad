@@ -10,6 +10,10 @@
 #include <stdbool.h>
 #include <Adafruit_TinyUSB.h>
 
+// ─── Report IDs (Keyboard+Consumer share one HID interface) ────────────────
+#define RID_KEYBOARD  1
+#define RID_CONSUMER  2
+
 // ─── USB interface objects ────────────────────────────────────────────────
 extern Adafruit_USBD_HID usb_kbd;    // Combined Keyboard + Consumer Control
 extern Adafruit_USBD_HID usb_fido;   // FIDO2 interface

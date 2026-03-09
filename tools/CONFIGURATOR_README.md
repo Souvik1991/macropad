@@ -230,6 +230,19 @@ Address 116-511: Reserved
 - ✅ Verify EEPROM commit succeeded (check Serial output)
 - ✅ Try RESET command to reinitialize
 
+### ERROR: EEPROM commit FAILED / Settings Lost After Power Cycle
+**Root cause:** The NVS partition is too small or fragmented. The default 20KB NVS cannot reliably store the 8KB EEPROM blob plus FIDO2 credentials.
+
+**Fix:** The firmware includes `partitions.csv` with a larger NVS (24KB). To apply it:
+1. Ensure `partitions.csv` is in the same folder as the `.ino` file
+2. **One-time:** Tools → Erase All Flash Before Sketch Upload → **Enabled**
+3. Upload the firmware (this writes the new partition layout)
+4. After that, set Erase All Flash back to **Disabled** for normal uploads
+
+**Diagnostics:** On boot, check Serial for:
+- `NVS: used=X free=Y` — if free is very low, NVS is full
+- `EEPROM raw: magic=0xFF` — indicates empty/corrupted NVS
+
 ### Settings/Key Names Lost After Every Flash Upload
 **Root cause:** ESP32 stores settings in the NVS (flash) partition. A **full flash erase** during upload wipes this partition. All bytes become 0xFF. The firmware reads the magic byte, gets 0xFF (instead of 0xAB), treats it as "first boot," and overwrites everything with defaults.
 

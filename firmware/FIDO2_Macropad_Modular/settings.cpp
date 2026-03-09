@@ -14,6 +14,14 @@ bool autoSwitchOnReconnect = false;
 
 MacroConfig storedMacros[NUM_MACROS];
 
+bool commitEEPROM(const char* context) {
+  if (EEPROM.commit()) return true;
+  debugPrint("ERROR: EEPROM commit FAILED (");
+  debugPrint(context);
+  debugPrintln(")");
+  return false;
+}
+
 void initSettings() {
   debugPrint("Initializing settings... ");
   
@@ -27,13 +35,11 @@ void initSettings() {
     initDefaultMacros();
     initDefaultLEDColors();
     initDefaultKeyNames();
-    EEPROM.commit();
+    commitEEPROM("initSettings first boot");
   } else {
     if (autoSwitchOnReconnect) {
       debugPrintln("USB reconnect detected - Auto-switching OS");
       autoToggleOS();
-    } else {
-      debugPrintln("Auto-switch disabled");
     }
   }
   
@@ -53,7 +59,7 @@ void initSettings() {
 
 void saveOSMode(OperatingSystem os) {
   EEPROM.write(EEPROM_ADDR_OS_MODE, (uint8_t)os);
-  EEPROM.commit();
+  commitEEPROM("saveOSMode");
   debugPrint("Saved OS mode: ");
   debugPrintln(os == OS_MAC ? "macOS" : "Windows");
 }
@@ -97,7 +103,7 @@ void setAutoSwitch(bool enabled) {
 void saveLEDBrightness(uint8_t brightness) {
   brightness = constrain(brightness, 0, 255);
   EEPROM.write(EEPROM_ADDR_LED_BRIGHTNESS, brightness);
-  EEPROM.commit();
+  commitEEPROM("saveLEDBrightness");
   FastLED.setBrightness(brightness);
   FastLED.show();  // Apply new brightness immediately (updateLEDs doesn't call show() when idle)
   debugPrint("Saved LED brightness: ");
@@ -121,7 +127,7 @@ void saveLEDColor(int ledIndex, CRGB color) {
   EEPROM.write(addr, color.r);
   EEPROM.write(addr + 1, color.g);
   EEPROM.write(addr + 2, color.b);
-  EEPROM.commit();
+  commitEEPROM("saveLEDColor");
   
   debugPrint("Saved LED ");
   debugPrint(ledIndex);
@@ -170,7 +176,7 @@ void saveMacro(int keyNum, MacroConfig &macro) {
   for (int i = 0; i < 5; i++) {
     EEPROM.write(addr + 3 + i, macro.data[i]);
   }
-  EEPROM.commit();
+  commitEEPROM("saveMacro");
   debugPrint("Saved macro for Key ");
   debugPrintln(keyNum);
 }
@@ -216,7 +222,7 @@ void saveKeyName(int keyNum, const char* name) {
     EEPROM.write(addr + i, name[i]);
   }
   EEPROM.write(addr + len, 0);
-  EEPROM.commit();
+  commitEEPROM("saveKeyName");
   
   debugPrint("Saved name for Key ");
   debugPrint(keyNum);
@@ -242,6 +248,22 @@ void loadKeyName(int keyNum, char* name, int maxLen) {
   name[len] = 0;
 }
 
+void loadSequence(int keyNum, int osOffset, char* buf, int bufSize) {
+  if (keyNum < 1 || keyNum > NUM_MACROS || bufSize < 1) {
+    buf[0] = 0;
+    return;
+  }
+  int seqAddr = EEPROM_ADDR_SEQUENCES + ((keyNum - 1) * 2 + osOffset) * MAX_SEQUENCE_LENGTH;
+  int len = 0;
+  for (int i = 0; i < bufSize - 1 && i < MAX_SEQUENCE_LENGTH; i++) {
+    char c = EEPROM.read(seqAddr + i);
+    if (c == 0) break;
+    buf[i] = c;
+    len++;
+  }
+  buf[len] = 0;
+}
+
 void initDefaultKeyNames() {
   for (int i = 1; i <= NUM_MACROS; i++) {
     saveKeyName(i, "");
@@ -256,4 +278,27 @@ bool hasAnyMacroConfigured() {
     }
   }
   return false;
+}
+
+void resetAllSettings() {
+  debugPrintln("Resetting all settings to factory defaults...");
+
+  initDefaultMacros();
+  initDefaultLEDColors();
+  initDefaultKeyNames();
+
+  // Clear all sequence data (12 keys × 2 OS = 24 sequences)
+  for (int i = 0; i < NUM_MACROS * 2; i++) {
+    int addr = EEPROM_ADDR_SEQUENCES + (i * MAX_SEQUENCE_LENGTH);
+    EEPROM.write(addr, 0);
+  }
+  commitEEPROM("resetAllSettings sequences");
+
+  saveOSMode(OS_WINDOWS);
+  saveLEDBrightness(LED_BRIGHTNESS);
+
+  loadMacros();
+  loadLEDColors();
+
+  debugPrintln("  Settings reset complete");
 }

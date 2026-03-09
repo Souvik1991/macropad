@@ -145,7 +145,7 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
       }
       updateDisplay();
       setLEDPattern(PATTERN_ERROR);
-      delay(1500);  // Let user see the retry message before next scan
+      delay(2000);  // Let user see the retry message before next scan
 
       // Send KEEPALIVE to keep the host happy during the retry delay
       uint8_t status = CTAPHID_STATUS_UPNEEDED;

@@ -8,7 +8,12 @@
 
 void initKeyMatrix();
 void scanKeyMatrix();
+void tickSequenceMacro();  // Non-blocking sequence continuation (call from loop)
 void enterSystemMenu();
 void updateSystemMenu();
+void updateSystemResetConfirm();
+
+// Returns true if the key at (row, col) is currently pressed
+bool isKeyPressed(int row, int col);
 
 #endif // KEYMATRIX_H

@@ -1,5 +1,12 @@
 # Cursor IDE Rules for ESP32-S3 FIDO2 Macropad Project
 
+## Code Change Rule (CRITICAL)
+
+- **ALWAYS confirm with the user before making any code change**
+- Propose the change (what files, what edits) and wait for explicit approval
+- Do not edit code unless the user has confirmed they want the change
+- Exception: When the user explicitly says "implement", "do it", "fix it", or similar direct instruction to proceed
+
 ## File Management Rules
 
 ### Markdown Files (.md)

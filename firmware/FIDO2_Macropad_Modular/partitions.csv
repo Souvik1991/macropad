@@ -1,0 +1,12 @@
+# Custom partition table - Larger NVS (28KB) for EEPROM (8KB blob) + FIDO2 credentials
+# Fixes ESP_ERR_NVS_NOT_ENOUGH_SPACE / EEPROM commit failures
+# No OTA (macropad doesn't need wireless firmware updates) - frees space for NVS
+#
+# Layout: 0x9000-0x10000 = 28KB for NVS (vs 20KB default)
+#         App must start at 0x10000 (64KB alignment)
+#
+# IMPORTANT: First upload requires Tools -> Erase All Flash Before Sketch Upload
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x7000,
+factory,  app,  factory,  0x10000, 0x3E0000,
+coredump, data, coredump,0x3F0000,0x10000,

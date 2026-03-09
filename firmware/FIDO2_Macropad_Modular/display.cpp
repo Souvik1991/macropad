@@ -8,6 +8,7 @@
 #include "display.h"
 #include "encoders.h"
 #include "fingerprint.h"
+#include "keymatrix.h"
 #include "secure.h"
 #include "settings.h"
 #include <stdio.h>
@@ -49,13 +50,23 @@ static void centerText(const __FlashStringHelper* text, int y, int textSize = 1)
   display.setCursor(centerX, y);
   display.print(text);
 }
-static void centerText(const char* text, int y, int textSize = 1) {
+void centerText(const char* text, int y, int textSize) {
   int16_t x1, y1;
   uint16_t w, h;
   display.setTextSize(textSize);
   display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
   int centerX = (SCREEN_WIDTH - (int)w) / 2;
   display.setCursor(centerX, y);
+  display.print(text);
+}
+// Helper: draw text centered within a horizontal span (e.g. a grid cell)
+static void centerTextInRect(const char* text, int rectX, int rectY, int rectW, int textSize = 1) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.setTextSize(textSize);
+  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  int centerX = rectX + ((int)rectW - (int)w) / 2;
+  display.setCursor(centerX, rectY);
   display.print(text);
 }
 
@@ -85,6 +96,7 @@ void displayBootFailScreen();
 void displayFPRequiredScreen();
 void displaySetupNeededScreen();
 void displaySystemMenuScreen();
+void displaySystemResetConfirmScreen();
 
 void updateDisplay() {
   display.clearDisplay();
@@ -175,6 +187,9 @@ void updateDisplay() {
     case MODE_SYSTEM_MENU:
       displaySystemMenuScreen();
       break;
+    case MODE_SYSTEM_RESET_CONFIRM:
+      displaySystemResetConfirmScreen();
+      break;
     default:
       displayIdleScreen();
       break;
@@ -230,28 +245,39 @@ void displayIdleScreen() {
   int startY = 13;
   int rowH = 11;
 
+  char cellText[8];
   for (int row = 0; row < MATRIX_ROWS; row++) {
     for (int col = 0; col < MATRIX_COLS; col++) {
       int keyIdx = row * MATRIX_COLS + col;  // 0-based index into storedMacros[]
       int cellX = col * cellW;
       int cellY = startY + row * rowH;
+      bool pressed = isKeyPressed(row, col);
 
-      display.setCursor(cellX + 1, cellY + 2);
+      if (pressed) {
+        // Invert: fill cell background white, text black
+        display.fillRect(cellX, cellY, cellW, rowH, SH110X_WHITE);
+        display.setTextColor(SH110X_BLACK);
+      } else {
+        display.setTextColor(SH110X_WHITE);
+      }
 
+      // Build cell text for centering
       if (storedMacros[keyIdx].type != MACRO_TYPE_DISABLED) {
-        // Show first 4 chars of key name
         loadKeyName(keyIdx + 1, name, sizeof(name));
         if (name[0] != 0) {
-          name[4] = '\0';  // Truncate to 4 chars
-          display.print(name);
+          name[4] = '\0';
+          strncpy(cellText, name, sizeof(cellText) - 1);
+          cellText[sizeof(cellText) - 1] = '\0';
         } else {
-          // Macro configured but no name — show key number
-          display.print(F("K"));
-          display.print(keyIdx + 1);
+          snprintf(cellText, sizeof(cellText), "K%d", keyIdx + 1);
         }
       } else {
-        display.print(F("[X]"));
+        strcpy(cellText, "[X]");
       }
+
+      centerTextInRect(cellText, cellX, cellY + 2, cellW);
+
+      display.setTextColor(SH110X_WHITE);  // Reset for next cell
     }
   }
 
@@ -485,8 +511,7 @@ void displayFIDO2FailedScreen() {
   display.println(F("DENY"));
 
   display.setTextSize(1);
-  display.setCursor(0, 56);
-  display.println(F("3 attempts failed"));
+  centerText(F("3 attempts failed"), 56);
 }
 
 void displaySuccessScreen() {
@@ -507,8 +532,7 @@ void displaySuccessScreen() {
   display.println(F("OK!"));
   
   display.setTextSize(1);
-  display.setCursor(0, 56);
-  display.println(F("Welcome back!"));
+  centerText(F("Welcome back!"), 56);
 }
 
 void displayErrorScreen() {
@@ -529,8 +553,7 @@ void displayErrorScreen() {
   display.println(F("ERR"));
   
   display.setTextSize(1);
-  display.setCursor(0, 56);
-  display.println(F("Try again..."));
+  centerText(F("try again"), 56);
 }
 
 // =====================================================
@@ -882,6 +905,7 @@ void displaySystemMenuScreen() {
     "Toggle OS",
     "Enroll Finger",
     "Delete Finger",
+    "System Reset",
     "Exit"
   };
 
@@ -909,6 +933,51 @@ void displaySystemMenuScreen() {
 
     display.setTextColor(SH110X_WHITE);
   }
+}
+
+// =====================================================
+// System Reset Confirm Dialog (Nokia-style Yes/No)
+// =====================================================
+
+void displaySystemResetConfirmScreen() {
+  display.setTextSize(1);
+
+  // Question text
+  centerText(F("RESET ALL DATA?"), 14);
+  display.setCursor(4, 26);
+  display.print(F("Fingerprints, macros,"));
+  display.setCursor(4, 36);
+  display.print(F("LEDs, passkeys"));
+
+  // --- Yes / No buttons (Nokia style) ---
+  int btnY = 50;
+  int btnW = 50;
+  int btnH = 12;
+  int yesX = 10;
+  int noX = 68;
+
+  if (fpConfirmYes) {
+    display.fillRoundRect(yesX, btnY, btnW, btnH, 3, SH110X_WHITE);
+    display.setTextColor(SH110X_BLACK);
+  } else {
+    display.drawRoundRect(yesX, btnY, btnW, btnH, 3, SH110X_WHITE);
+    display.setTextColor(SH110X_WHITE);
+  }
+  display.setCursor(yesX + 14, btnY + 2);
+  display.print(F("Yes"));
+
+  display.setTextColor(SH110X_WHITE);
+  if (!fpConfirmYes) {
+    display.fillRoundRect(noX, btnY, btnW, btnH, 3, SH110X_WHITE);
+    display.setTextColor(SH110X_BLACK);
+  } else {
+    display.drawRoundRect(noX, btnY, btnW, btnH, 3, SH110X_WHITE);
+    display.setTextColor(SH110X_WHITE);
+  }
+  display.setCursor(noX + 17, btnY + 2);
+  display.print(F("No"));
+
+  display.setTextColor(SH110X_WHITE);
 }
 
 // =====================================================

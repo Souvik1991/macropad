@@ -49,206 +49,6 @@ function initUI() {
     generateLEDConfig();
 }
 
-// Default macro configurations with OS-specific sequences
-const defaultMacros = [
-    {
-        label: 'Screenshot',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8, 2], keys: [70], id: 1 } // Win+Shift+PrintScreen
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8, 2], keys: [4], id: 1 } // Cmd+Shift+4
-            ]
-        }
-    },
-    {
-        label: 'Mic Mute',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [1, 2], keys: [13], id: 1 } // Ctrl+Shift+M
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8, 2], keys: [13], id: 1 } // Cmd+Shift+M
-            ]
-        }
-    },
-    {
-        label: 'Video Toggle',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [1, 2], keys: [25], id: 1 } // Ctrl+Shift+V
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8, 2], keys: [25], id: 1 } // Cmd+Shift+V
-            ]
-        }
-    },
-    {
-        label: 'Lock Screen',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [15], id: 1 } // Win+L
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8, 1], keys: [27], id: 1 } // Cmd+Ctrl+Q
-            ]
-        }
-    },
-    {
-        label: 'Copy',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [1], keys: [6], id: 1 } // Ctrl+C
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [6], id: 1 } // Cmd+C
-            ]
-        }
-    },
-    {
-        label: 'Cut',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [1], keys: [27], id: 1 } // Ctrl+X
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [27], id: 1 } // Cmd+X
-            ]
-        }
-    },
-    {
-        label: 'Paste',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [1], keys: [25], id: 1 } // Ctrl+V
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [25], id: 1 } // Cmd+V
-            ]
-        }
-    },
-    {
-        label: 'Delete',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [], keys: [76], id: 1 } // Delete
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [], keys: [76], id: 1 } // Delete (same on Mac)
-            ]
-        }
-    },
-    {
-        label: 'Cursor IDE',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [21], id: 1 } // Win+R
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [44], id: 1 } // Cmd+Space
-            ]
-        }
-    },
-    {
-        label: 'Browser DevTools',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [], keys: [69], id: 1 } // F12
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8, 2], keys: [12], id: 1 } // Cmd+Shift+I
-            ]
-        }
-    },
-    {
-        label: 'Terminal',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [21], id: 1 }, // Win+R
-                { type: 'delay', delay: 200, id: 2 },
-                { type: 'text', text: 'cmd', id: 3 },
-                { type: 'delay', delay: 100, id: 4 },
-                { type: 'key', modifiers: [], keys: [40], id: 5 } // Enter
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [44], id: 1 }, // Cmd+Space
-                { type: 'delay', delay: 200, id: 2 },
-                { type: 'text', text: 'terminal', id: 3 },
-                { type: 'delay', delay: 100, id: 4 },
-                { type: 'key', modifiers: [], keys: [40], id: 5 } // Enter
-            ]
-        }
-    },
-    {
-        label: 'Calculator',
-        windows: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [21], id: 1 }, // Win+R
-                { type: 'delay', delay: 200, id: 2 },
-                { type: 'text', text: 'calc', id: 3 },
-                { type: 'delay', delay: 100, id: 4 },
-                { type: 'key', modifiers: [], keys: [40], id: 5 } // Enter
-            ]
-        },
-        mac: {
-            type: 4,
-            sequenceSteps: [
-                { type: 'key', modifiers: [8], keys: [44], id: 1 }, // Cmd+Space
-                { type: 'delay', delay: 200, id: 2 },
-                { type: 'text', text: 'calculator', id: 3 },
-                { type: 'delay', delay: 100, id: 4 },
-                { type: 'key', modifiers: [], keys: [40], id: 5 } // Enter
-            ]
-        }
-    }
-];
-
 function generateMacroCards() {
     const grid = document.getElementById('macrosGrid');
     grid.innerHTML = '';
@@ -563,7 +363,7 @@ window.openSequenceModal = function (index) {
         <div class="help-text">
             💡 <strong>Tips:</strong>
             <ul style="margin-top: 5px;">
-                <li>Use delays (100-500ms) between actions for reliability</li>
+                <li>Use delays (100–500ms typical, max 5s) between actions for reliability</li>
                 <li>Release all keys before starting a new sequence</li>
             </ul>
         </div>
@@ -1043,8 +843,9 @@ function renderSequenceSteps(index, containerId = null) {
             `;
         } else if (step.type === 'delay') {
             stepHtml += `
-                <label>Delay (ms):</label>
+                <label>Delay (ms, max 5s):</label>
                 <input type="number" value="${step.delay || 200}" min="0" max="5000" step="50"
+                       placeholder="0–5000"
                        oninput="window.updateSequenceStepDelay(${index}, ${step.id}, this.value)">
             `;
         } else if (step.type === 'release') {
@@ -1128,11 +929,13 @@ window.updateSequenceStepText = function (index, stepId, text) {
 }
 
 window.updateSequenceStepDelay = function (index, stepId, delay) {
+    const val = parseInt(delay) || 0;
+    const clamped = Math.min(5000, Math.max(0, val));
     const isInModal = currentSequenceIndex === index;
     const currentSteps = currentOS === 'both' ? (isInModal ? modalSequenceSteps.windows : sequenceSteps[index].windows) : (isInModal ? modalSequenceSteps[currentOS] : sequenceSteps[index][currentOS]);
     const step = currentSteps.find(s => s.id === stepId);
     if (step) {
-        step.delay = parseInt(delay);
+        step.delay = clamped;
         if (isInModal) {
             updateModalPreview(index);
         } else {

@@ -146,7 +146,8 @@ enum SystemMode {
   MODE_BOOT_FAIL,              // A critical component failed
   MODE_FP_REQUIRED,            // No fingerprint enrolled - prompting enrollment
   MODE_SETUP_NEEDED,           // No macros configured - showing setup URL
-  MODE_SYSTEM_MENU             // System settings menu (Key 9+12 combo)
+  MODE_SYSTEM_MENU,            // System settings menu (Key 9+12 combo)
+  MODE_SYSTEM_RESET_CONFIRM    // Confirm system reset (Yes/No)
 };
 
 enum OperatingSystem {

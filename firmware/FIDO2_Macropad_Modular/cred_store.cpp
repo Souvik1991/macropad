@@ -131,3 +131,21 @@ bool cred_save(Cred* c) {
 void cred_update_counter(Cred* c) {
   cred_save(c);  // Just re-save the whole blob (54 bytes, fast enough)
 }
+
+void cred_clear() {
+  // Mark all passkey slots (1-14) as free in secure element tracking
+  if (isDevicePresent()) {
+    for (uint8_t slot = 1; slot <= MAX_CREDS; slot++) {
+      markSlotFree(slot);
+    }
+  }
+
+  prefs.begin("fido2_creds", false);
+  prefs.clear();
+  prefs.end();
+
+  memset(creds, 0, sizeof(creds));
+  cred_count = 0;
+
+  debugPrintln("  All FIDO2 credentials cleared");
+}

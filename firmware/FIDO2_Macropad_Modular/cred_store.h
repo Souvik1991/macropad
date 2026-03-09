@@ -43,3 +43,6 @@ bool cred_save(Cred* c);
 
 // Update sign counter only — faster than a full cred_save().
 void cred_update_counter(Cred* c);
+
+// Clear all credentials (NVS + slot tracking). Use for factory reset.
+void cred_clear();
