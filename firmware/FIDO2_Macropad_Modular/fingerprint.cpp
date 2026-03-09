@@ -46,8 +46,15 @@ static SystemMode enrollReturnMode() {
 // Sleep / Wake (RST pin control)
 // =====================================================
 
+static unsigned long lastFpSleepAt = 0;
+#define FP_MIN_SLEEP_MS 300  // Min time between sleep and next wake (avoids rapid cycles)
+
 /** Wake the fingerprint sensor. RST HIGH, wait 200ms. Call before any UART command. */
 static void fpWake() {
+  unsigned long sinceSleep = millis() - lastFpSleepAt;
+  if (lastFpSleepAt != 0 && sinceSleep < FP_MIN_SLEEP_MS) {
+    delay(FP_MIN_SLEEP_MS - (unsigned int)sinceSleep);
+  }
   digitalWrite(FINGERPRINT_RST, HIGH);
   delay(200);
 }
@@ -55,6 +62,7 @@ static void fpWake() {
 /** Put the fingerprint sensor to sleep. RST LOW. Call after UART operations complete. */
 static void fpSleep() {
   digitalWrite(FINGERPRINT_RST, LOW);
+  lastFpSleepAt = millis();
 }
 
 // =====================================================
@@ -248,8 +256,15 @@ FpResult verifyFingerprint() {
 
   uint8_t m = fpTxAndRxCmd(5, 8, 5000);
 
+  // Check UART/comm errors first — don't trust fp_RxBuf if we didn't get a valid frame
+  if (m != ACK_SUCCESS) {
+    debugPrintf("  UART/comm error (m=0x%02X)\n", m);
+    fpSleep();
+    return (m == ACK_TIMEOUT) ? FP_TIMEOUT : FP_SENSOR_ERROR;
+  }
+
   FpResult result;
-  if ((m == ACK_SUCCESS) && (isMasterUser(fp_RxBuf[4])) && fp_RxBuf[3] != 0) {
+  if ((isMasterUser(fp_RxBuf[4])) && fp_RxBuf[3] != 0) {
     debugPrint("  Matched user ID: ");
     debugPrintln(fp_matchedUserId);
     result = FP_MATCH;
@@ -259,8 +274,31 @@ FpResult verifyFingerprint() {
   } else if (fp_RxBuf[4] == ACK_TIMEOUT) {
     debugPrintln("  Timeout - no finger detected");
     result = FP_TIMEOUT;
+  } else if (fp_RxBuf[4] == ACK_FINGER_OCCUPIED) {
+    // Finger still on sensor from previous scan (common with rapid Windows requests)
+    debugPrintln("  Finger still on sensor — waiting for lift");
+    fpSleep();
+    delay(800);  // Let user lift finger
+    fpWake();
+    m = fpTxAndRxCmd(5, 8, 5000);
+    if (m != ACK_SUCCESS) {
+      fpSleep();
+      return (m == ACK_TIMEOUT) ? FP_TIMEOUT : FP_SENSOR_ERROR;
+    }
+    if ((isMasterUser(fp_RxBuf[4])) && fp_RxBuf[3] != 0) {
+      debugPrint("  Matched user ID (retry): ");
+      debugPrintln(fp_matchedUserId);
+      result = FP_MATCH;
+    } else if (fp_RxBuf[4] == ACK_NO_USER) {
+      result = FP_NO_MATCH;
+    } else if (fp_RxBuf[4] == ACK_TIMEOUT) {
+      result = FP_TIMEOUT;
+    } else {
+      debugPrintf("  Unexpected after retry: 0x%02X\n", fp_RxBuf[4]);
+      result = FP_SENSOR_ERROR;
+    }
   } else {
-    debugPrintln("  Sensor error or unexpected response");
+    debugPrintf("  Sensor error or unexpected response: 0x%02X\n", fp_RxBuf[4]);
     result = FP_SENSOR_ERROR;
   }
 

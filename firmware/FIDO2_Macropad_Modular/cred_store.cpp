@@ -11,6 +11,7 @@
 #include "cred_store.h"
 #include "secure.h"
 #include "debug.h"
+#include "pin_store.h"
 #include <Preferences.h>
 #include <string.h>
 #include <esp_random.h>
@@ -146,6 +147,8 @@ void cred_clear() {
 
   memset(creds, 0, sizeof(creds));
   cred_count = 0;
+
+  pinClear();  // Also clear ClientPIN
 
   debugPrintln("  All FIDO2 credentials cleared");
 }

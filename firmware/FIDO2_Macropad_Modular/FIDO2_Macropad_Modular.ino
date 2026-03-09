@@ -54,6 +54,7 @@ uint8_t fpMenuItemCount = 0;     // Total items in delete menu
 uint8_t fpDeleteTargetId = 0;    // ID selected for deletion
 bool fpConfirmYes = false;       // Confirm dialog selection
 uint8_t fpAuthAttempt = 0;       // Current fingerprint auth attempt (1-3)
+char fido2RpId[64] = "";         // Requester/relying party ID for FIDO2 display (e.g. github.com)
 int8_t sysMenuSelection = 0;     // Highlighted item in system menu
 uint8_t sysMenuItemCount = 4;    // Total items: Toggle OS, Enroll FP, Delete FP, Exit
 

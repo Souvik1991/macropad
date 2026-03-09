@@ -14,6 +14,10 @@
 
 CRGB leds[NUM_LEDS];
 
+// Cache of user's saved LED colors — restored from this instead of EEPROM on pattern timeout
+static CRGB savedLedsCache[NUM_LEDS];
+static bool cacheValid = false;
+
 // Track when to revert from a temporary status pattern
 static unsigned long patternStartTime = 0;
 static unsigned long patternDuration = 0;
@@ -33,8 +37,26 @@ void initLEDs() {
   debugPrintln("OK");
 }
 
+/** Called by loadLEDColors() after loading from EEPROM — updates cache so restoreSavedLEDs doesn't need EEPROM. */
+void syncSavedLEDsCache() {
+  for (int i = 0; i < NUM_LEDS; i++) savedLedsCache[i] = leds[i];
+  cacheValid = true;
+}
+
+/** Update cache when a single LED color is saved (keeps cache in sync without full reload). */
+void updateSavedLEDsCacheEntry(int index, CRGB color) {
+  if (index >= 0 && index < NUM_LEDS) {
+    savedLedsCache[index] = color;
+  }
+}
+
 void restoreSavedLEDs() {
-  loadLEDColors();
+  if (cacheValid) {
+    for (int i = 0; i < NUM_LEDS; i++) leds[i] = savedLedsCache[i];
+  } else {
+    loadLEDColors();  // Fallback if cache not yet populated (e.g. before initSettings)
+  }
+  FastLED.show();
   patternActive = false;
 }
 

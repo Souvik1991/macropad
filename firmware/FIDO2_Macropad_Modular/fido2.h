@@ -12,14 +12,22 @@
 // ─── CTAP2 error codes ───────────────────────────────────────────────────
 #define CTAP2_OK                  0x00
 #define CTAP1_ERR_INVALID_CMD     0x01
+#define CTAP1_ERR_INVALID_PARAMETER 0x02
 #define CTAP1_ERR_INVALID_LEN     0x03
+#define CTAP1_ERR_OTHER           0x7F
 #define CTAP2_ERR_INVALID_CBOR    0x12
 #define CTAP2_ERR_MISSING_PARAM   0x14
 #define CTAP2_ERR_UNSUPPORTED_ALG 0x26
 #define CTAP2_ERR_OPERATION_DENIED 0x27
 #define CTAP2_ERR_KEY_STORE_FULL  0x28
-#define CTAP2_ERR_PIN_NOT_SET     0x30  // Used for Windows SelectDevice probe (device selected)
+#define CTAP2_ERR_PIN_INVALID     0x31
+#define CTAP2_ERR_PIN_BLOCKED     0x32
+#define CTAP2_ERR_PIN_AUTH_INVALID 0x33
+#define CTAP2_ERR_PIN_NOT_SET     0x35
+#define CTAP2_ERR_PIN_POLICY_VIOLATION 0x37
 #define CTAP2_ERR_NO_CREDENTIALS  0x2E
+
+#define CTAP2_CMD_CLIENT_PIN      0x06
 
 // ─── CTAP2 command IDs ───────────────────────────────────────────────────
 #define CTAP2_CMD_MAKE_CREDENTIAL 0x01

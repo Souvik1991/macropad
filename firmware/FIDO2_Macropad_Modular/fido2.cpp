@@ -21,6 +21,8 @@
 #include "cred_store.h"
 #include "cbor_mini.h"
 #include "crypto_utils.h"
+#include "pin_store.h"
+#include "pin_protocol.h"
 #include <Arduino.h>
 #include <string.h>
 
@@ -40,6 +42,17 @@ static uint32_t nextCID = 0x00000001;
 #define GET_ASSERTION_SESSION_MS  5000
 static uint8_t  lastGetAssertionRpIdHash[32] = {0};
 static uint32_t lastGetAssertionTime = 0;
+
+// Persist fingerprint attempt across host retries (CANCEL + new GetAssertion)
+// so "2/3" doesn't reset to "1/3" when browser cancels and retries
+#define FP_AUTH_RETRY_WINDOW_MS  10000
+static uint8_t  persistedFpAttempt = 0;
+static uint32_t persistedFpAttemptAt = 0;
+
+// ClientPIN: pinUvAuthToken session (16 bytes). Set when getPINToken returns.
+#define PIN_TOKEN_VALID_MS  30000
+static uint8_t  pinUvAuthToken[16] = {0};
+static uint32_t pinTokenSetAt = 0;
 
 // ─── Initialization ──────────────────────────────────────────────────────
 
@@ -86,7 +99,16 @@ static void handleMsg(uint32_t cid) {
 bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
   debugPrintln("[FIDO2] >>> Fingerprint auth started <<<");
 
-  for (int attempt = 1; attempt <= FP_AUTH_MAX_RETRIES; attempt++) {
+  // Resume from persisted attempt if host cancelled and retried recently
+  int startAttempt = 1;
+  if (persistedFpAttempt > 0 && persistedFpAttempt <= FP_AUTH_MAX_RETRIES &&
+      (millis() - persistedFpAttemptAt) < FP_AUTH_RETRY_WINDOW_MS) {
+    startAttempt = persistedFpAttempt;
+    debugPrintf("[FIDO2] Resuming from attempt %d (host retry)\n", startAttempt);
+  }
+  persistedFpAttempt = 0;  // Clear so next fresh auth starts at 1
+
+  for (int attempt = startAttempt; attempt <= FP_AUTH_MAX_RETRIES; attempt++) {
     fpAuthAttempt = (uint8_t)attempt;
 
     // Show scan prompt on OLED
@@ -114,6 +136,7 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
     // arrived (host may have timed out but user completed auth — send assertion).
     if (fpResult == FP_MATCH) {
       debugPrintf("[FIDO2] Fingerprint matched on attempt %d\n", attempt);
+      persistedFpAttempt = 0;
       fpAuthAttempt = 0;
       return true;
     }
@@ -124,6 +147,9 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
       if (rx_queue[peek].len >= 5 && rx_queue[peek].data[4] == 0x91) {
         rx_tail = (rx_tail + 1) % RX_QUEUE_DEPTH;
         debugPrintln("[FIDO2] CANCEL received during fingerprint scan");
+        // Host may retry — resume from next attempt (current one was used)
+        persistedFpAttempt = (uint8_t)(attempt < FP_AUTH_MAX_RETRIES ? attempt + 1 : attempt);
+        persistedFpAttemptAt = millis();
         fpAuthAttempt = 0;
         currentMode = MODE_IDLE;
         updateDisplay();
@@ -134,6 +160,7 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
     if (fpResult == FP_SENSOR_ERROR) {
       // Hardware failure — abort immediately, don't waste remaining retries
       debugPrintln("[FIDO2] Sensor error — aborting auth");
+      persistedFpAttempt = 0;
       fpAuthAttempt = 0;
       currentMode = MODE_FIDO2_FP_SENSOR_ERR;
       updateDisplay();
@@ -166,6 +193,7 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
 
   // All attempts exhausted
   debugPrintln("[FIDO2] All fingerprint attempts failed");
+  persistedFpAttempt = 0;
   fpAuthAttempt = 0;
   currentMode = MODE_FIDO2_FP_FAILED;
   updateDisplay();
@@ -180,34 +208,299 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
 void handleGetInfo(uint32_t cid) {
   debugPrintln("[FIDO2] GetInfo");
 
-  uint8_t r[128];
+  uint8_t r[200];
   size_t p = 0;
   r[p++] = 0x00;  // status OK
-  r[p++] = 0xA4;  // 4-item map
+  r[p++] = 0xA8;  // 8-item map
 
   // key 1: versions array
   p += cbor_enc_uint(r+p, 1);
-  r[p++] = 0x81;  // 1-element array
+  r[p++] = 0x82;  // 2-element array: FIDO_2_0, FIDO_2_1
   p += cbor_enc_text(r+p, "FIDO_2_0");
+  p += cbor_enc_text(r+p, "FIDO_2_1");
 
   // key 3: aaguid (16 zero bytes)
   p += cbor_enc_uint(r+p, 3);
   uint8_t aaguid[16] = {0};
   p += cbor_enc_bytes(r+p, aaguid, 16);
 
-  // key 4: options map {up:true, uv:true, plat:false, rk:true}
+  // key 4: options map {up, uv, plat, rk, clientPin, pinUvAuthToken}
   p += cbor_enc_uint(r+p, 4);
-  r[p++] = 0xA4;  // 4-item map
-  p += cbor_enc_text(r+p, "up");   r[p++] = 0xF5; // true
-  p += cbor_enc_text(r+p, "uv");   r[p++] = 0xF5; // true
-  p += cbor_enc_text(r+p, "plat"); r[p++] = 0xF4; // false
-  p += cbor_enc_text(r+p, "rk");   r[p++] = 0xF5; // true
+  r[p++] = 0xA6;  // 6-item map
+  p += cbor_enc_text(r+p, "up");             r[p++] = 0xF5; // true
+  p += cbor_enc_text(r+p, "uv");             r[p++] = 0xF5; // true
+  p += cbor_enc_text(r+p, "plat");           r[p++] = 0xF4; // false
+  p += cbor_enc_text(r+p, "rk");             r[p++] = 0xF5; // true
+  p += cbor_enc_text(r+p, "clientPin");      r[p++] = pinIsSet() ? 0xF5 : 0xF4; // true if PIN set
+  p += cbor_enc_text(r+p, "pinUvAuthToken"); r[p++] = 0xF5; // true: supports getPinUvAuthTokenUsingUv
 
-  // key 7: maxMsgSize
-  p += cbor_enc_uint(r+p, 7);
+  // key 5: maxMsgSize
+  p += cbor_enc_uint(r+p, 5);
   p += cbor_enc_uint(r+p, 1024);
 
+  // key 6: pinUvAuthProtocols [1]
+  p += cbor_enc_uint(r+p, 6);
+  r[p++] = 0x81;  // 1-element array
+  p += cbor_enc_uint(r+p, 1);  // protocol v1
+
+  // key 7: maxCredentialCountInList (optional, for credential list)
+  p += cbor_enc_uint(r+p, 7);
+  p += cbor_enc_uint(r+p, 8);
+
+  // key 9: transports ["usb"]
+  p += cbor_enc_uint(r+p, 9);
+  r[p++] = 0x81;  // 1-element array
+  p += cbor_enc_text(r+p, "usb");
+
+  // key 13 (0x0D): minPINLength (required when clientPin supported)
+  p += cbor_enc_uint(r+p, 13);
+  p += cbor_enc_uint(r+p, 4);
+
   sendCTAPHIDLarge(cid, CTAPHID_CBOR, r, (uint16_t)p);
+}
+
+// ─── CTAP2: authenticatorClientPIN (0x06) ────────────────────────────────
+
+static void handleClientPIN(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
+  debugPrintf("[FIDO2] ClientPIN bcnt=%d\n", bcnt);
+  if (bcnt < 2) { sendCTAPError(cid, CTAP2_ERR_INVALID_CBOR); return; }
+
+  const uint8_t* cbor = payload + 1;
+  size_t cborLen = bcnt - 1;
+
+  // subCommand is key 0x02 per CTAP2 spec (0x01 = pinUvAuthProtocol)
+  uint8_t subCmd = 0;
+  {
+    const uint8_t* v; size_t va;
+    if (!cbor_map_find_uint(cbor, cborLen, 0x02, &v, &va)) {
+      sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+      return;
+    }
+    int32_t sc;
+    if (!cbor_get_int(v, va, &sc) || sc < 0 || sc > 255) {
+      sendCTAPError(cid, CTAP2_ERR_INVALID_CBOR);
+      return;
+    }
+    subCmd = (uint8_t)sc;
+  }
+  debugPrintf("  ClientPIN subCmd=0x%02X\n", subCmd);
+
+  uint8_t resp[128];
+  size_t rp = 0;
+  resp[rp++] = 0x00;  // status OK
+
+  switch (subCmd) {
+    case 0x01: {  // getPINRetries
+      uint8_t retries = pinGetRetries();
+      if (retries == 0) {
+        resp[rp++] = 0xA2;  // 2-item map
+        rp += cbor_enc_uint(resp+rp, 3);  // key 3: pinRetries
+        rp += cbor_enc_uint(resp+rp, 0);
+        rp += cbor_enc_uint(resp+rp, 4);  // key 4: powerCycleState
+        resp[rp++] = 0xF5;  // true
+      } else {
+        resp[rp++] = 0xA1;  // 1-item map
+        rp += cbor_enc_uint(resp+rp, 3);  // key 3: pinRetries
+        rp += cbor_enc_uint(resp+rp, retries);
+      }
+      break;
+    }
+    case 0x07: {  // getUVRetries — fingerprint attempts remaining before lockout
+      resp[rp++] = 0xA1;  // 1-item map
+      rp += cbor_enc_uint(resp+rp, 5);  // key 5: uvRetries
+      rp += cbor_enc_uint(resp+rp, 5);  // 5 attempts (we don't lock out UV)
+      break;
+    }
+    case 0x02: {  // getKeyAgreement — keyAgreement is COSE_Key (embedded map), not bstr
+      uint8_t keyAgree[91];
+      size_t kaLen = pinProtocolGetKeyAgreement(keyAgree, sizeof(keyAgree));
+      if (kaLen == 0) {
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      resp[rp++] = 0xA1;  // 1-item map
+      rp += cbor_enc_uint(resp+rp, 1);  // key 1: keyAgreement
+      memcpy(resp + rp, keyAgree, kaLen);  // value: COSE_Key map (embedded, not bstr)
+      rp += kaLen;
+      break;
+    }
+    case 0x03: {  // setPIN — keys: 0x03 keyAgreement, 0x05 newPinEnc, 0x04 pinUvAuthParam
+      debugPrintln("  setPIN: parsing...");
+      if (pinIsSet()) {
+        debugPrintln("  setPIN: PIN already set");
+        sendCTAPError(cid, CTAP2_ERR_PIN_AUTH_INVALID);
+        return;
+      }
+      const uint8_t* keyAgreeV, *newPinEncV, *pinUvParamV;
+      size_t kaVa, neVa, pvVa;
+      if (!cbor_map_find_uint(cbor, cborLen, 0x03, &keyAgreeV, &kaVa) ||
+          !cbor_map_find_uint(cbor, cborLen, 0x05, &newPinEncV, &neVa) ||
+          !cbor_map_find_uint(cbor, cborLen, 0x04, &pinUvParamV, &pvVa)) {
+        debugPrintln("  setPIN: missing params");
+        sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+        return;
+      }
+      uint8_t keyAgree[91], newPinEnc[96], pinUvParam[16];
+      // keyAgreement is COSE_Key (CBOR map), not bstr — get encoded map bytes via cbor_skip
+      size_t kaLen = cbor_skip(keyAgreeV, kaVa);
+      if (kaLen == 0 || kaLen > sizeof(keyAgree)) kaLen = 0;
+      else memcpy(keyAgree, keyAgreeV, kaLen);
+      size_t neLen = cbor_get_bytes(newPinEncV, neVa, newPinEnc, sizeof(newPinEnc));
+      size_t pvLen = cbor_get_bytes(pinUvParamV, pvVa, pinUvParam, 16);
+      debugPrintf("  setPIN: kaLen=%d neLen=%d pvLen=%d\n", (int)kaLen, (int)neLen, (int)pvLen);
+      if (kaLen == 0 || neLen == 0 || pvLen != 16) {
+        debugPrintln("  setPIN: bad param lengths");
+        sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+        return;
+      }
+      pinProtocolSetPlatformKey(keyAgree, kaLen);
+      uint8_t sharedSecret[32];
+      if (!pinProtocolDeriveSharedSecret(sharedSecret, 32)) {
+        debugPrintln("  setPIN: deriveSharedSecret failed");
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      uint8_t expectedAuth[16];
+      pinProtocolAuthenticate(sharedSecret, 32, newPinEnc, neLen, expectedAuth);
+      if (memcmp(expectedAuth, pinUvParam, 16) != 0) {
+        debugPrintln("  setPIN: pinUvAuthParam verify failed");
+        sendCTAPError(cid, CTAP2_ERR_PIN_AUTH_INVALID);
+        return;
+      }
+      uint8_t newPinPadded[96];
+      size_t npLen;
+      if (!pinProtocolDecrypt(sharedSecret, 32, newPinEnc, neLen, newPinPadded, &npLen)) {
+        debugPrintln("  setPIN: decrypt failed");
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      size_t pinLen = 0;
+      while (pinLen < npLen && newPinPadded[pinLen] != 0) pinLen++;
+      if (pinLen < 4) {
+        debugPrintln("  setPIN: PIN too short");
+        sendCTAPError(cid, CTAP2_ERR_PIN_POLICY_VIOLATION);
+        return;
+      }
+      uint8_t pinHash[32];
+      if (!computeSHA256(newPinPadded, pinLen, pinHash)) {
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      pinStoreHash(pinHash);
+      pinResetRetries();
+      resp[rp++] = 0xA0;  // empty map
+      debugPrintln("  setPIN: OK");
+      break;
+    }
+    case 0x05: {  // getPINToken (legacy) — keys: 0x03 keyAgreement, 0x06 pinHashEnc
+      if (!pinIsSet()) {
+        sendCTAPError(cid, CTAP2_ERR_PIN_NOT_SET);
+        return;
+      }
+      if (pinGetRetries() == 0) {
+        sendCTAPError(cid, CTAP2_ERR_PIN_BLOCKED);
+        return;
+      }
+      const uint8_t* keyAgreeV, *pinHashEncV;
+      size_t kaVa, phVa;
+      if (!cbor_map_find_uint(cbor, cborLen, 0x03, &keyAgreeV, &kaVa) ||
+          !cbor_map_find_uint(cbor, cborLen, 0x06, &pinHashEncV, &phVa)) {
+        sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+        return;
+      }
+      uint8_t keyAgree[91], pinHashEnc[32];
+      size_t kaLen = cbor_get_bytes(keyAgreeV, kaVa, keyAgree, sizeof(keyAgree));
+      size_t phLen = cbor_get_bytes(pinHashEncV, phVa, pinHashEnc, sizeof(pinHashEnc));
+      if (kaLen == 0 || phLen != 16) {
+        sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+        return;
+      }
+      pinProtocolSetPlatformKey(keyAgree, kaLen);
+      uint8_t sharedSecret[32];
+      if (!pinProtocolDeriveSharedSecret(sharedSecret, 32)) {
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      uint8_t pinHashDec[16];
+      size_t pdLen;
+      if (!pinProtocolDecrypt(sharedSecret, 32, pinHashEnc, 16, pinHashDec, &pdLen) || pdLen != 16) {
+        pinDecrementRetries();
+        sendCTAPError(cid, CTAP2_ERR_PIN_INVALID);
+        return;
+      }
+      if (!pinVerifyHash(pinHashDec)) {
+        pinDecrementRetries();
+        sendCTAPError(cid, CTAP2_ERR_PIN_INVALID);
+        return;
+      }
+      pinResetRetries();
+      esp_fill_random(pinUvAuthToken, 16);
+      pinTokenSetAt = millis();
+      uint8_t tokenEnc[32];
+      size_t teLen;
+      if (!pinProtocolEncrypt(sharedSecret, 32, pinUvAuthToken, 16, tokenEnc, &teLen)) {
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      resp[rp++] = 0xA1;
+      rp += cbor_enc_uint(resp+rp, 2);  // key 2: pinUvAuthToken
+      rp += cbor_enc_bytes(resp+rp, tokenEnc, 16);
+      break;
+    }
+    case 0x06: {  // getPinUvAuthTokenUsingUv (fingerprint) — key 0x03 keyAgreement
+      fidoBusy = true;
+      if (!waitForFingerprintAuth(cid, FP_AUTH_TIMEOUT_MS)) {
+        fidoBusy = false;
+        sendCTAPError(cid, CTAP2_ERR_OPERATION_DENIED);
+        return;
+      }
+      const uint8_t* keyAgreeV;
+      size_t kaVa;
+      if (!cbor_map_find_uint(cbor, cborLen, 0x03, &keyAgreeV, &kaVa)) {
+        fidoBusy = false;
+        sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+        return;
+      }
+      uint8_t keyAgree[91];
+      size_t kaLen = cbor_get_bytes(keyAgreeV, kaVa, keyAgree, sizeof(keyAgree));
+      if (kaLen == 0) {
+        fidoBusy = false;
+        sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+        return;
+      }
+      pinProtocolSetPlatformKey(keyAgree, kaLen);
+      uint8_t sharedSecret[32];
+      if (!pinProtocolDeriveSharedSecret(sharedSecret, 32)) {
+        fidoBusy = false;
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      esp_fill_random(pinUvAuthToken, 16);
+      pinTokenSetAt = millis();
+      uint8_t tokenEnc[32];
+      size_t teLen;
+      if (!pinProtocolEncrypt(sharedSecret, 32, pinUvAuthToken, 16, tokenEnc, &teLen)) {
+        fidoBusy = false;
+        sendCTAPError(cid, CTAP1_ERR_OTHER);
+        return;
+      }
+      fidoBusy = false;
+      resp[rp++] = 0xA1;
+      rp += cbor_enc_uint(resp+rp, 2);
+      rp += cbor_enc_bytes(resp+rp, tokenEnc, 16);
+      break;
+    }
+    default:
+      sendCTAPError(cid, CTAP1_ERR_INVALID_PARAMETER);
+      return;
+  }
+
+  // getKeyAgreement response (~84 bytes) exceeds 57-byte single-packet limit; use Large
+  if (rp > 57) {
+    sendCTAPHIDLarge(cid, CTAPHID_CBOR, resp, (uint16_t)rp);
+  } else {
+    sendCTAPHIDResponse(cid, CTAPHID_CBOR, resp, (uint16_t)rp);
+  }
 }
 
 // ─── CTAP2: authenticatorMakeCredential (0x01) ───────────────────────────
@@ -215,6 +508,68 @@ void handleGetInfo(uint32_t cid) {
 void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   debugPrintln("[FIDO2] === MakeCredential ===");
   if (bcnt < 2) { sendCTAPError(cid, CTAP2_ERR_INVALID_CBOR); return; }
+
+  const uint8_t* cbor    = payload + 1;
+  size_t         cborLen = bcnt - 1;
+
+  // --- Parse pinUvAuthParam (0x08) and pinUvAuthProtocol (0x09) for ClientPIN flow ---
+  const uint8_t* pinUvParamV = nullptr;
+  size_t pinUvParamVa = 0;
+  bool hasPinUvParam = cbor_map_find_uint(cbor, cborLen, 0x08, &pinUvParamV, &pinUvParamVa);
+
+  if (hasPinUvParam && pinUvParamVa > 0) {
+    uint8_t paramBuf[32];
+    size_t paramLen = cbor_get_bytes(pinUvParamV, pinUvParamVa, paramBuf, sizeof(paramBuf));
+    if (paramLen == 16) {
+      // Verify pinUvAuthParam = HMAC-SHA-256(pinUvAuthToken, clientDataHash)[:16]
+      const uint8_t* cdHashV; size_t cdHashVa;
+      if (cbor_map_find_uint(cbor, cborLen, 0x01, &cdHashV, &cdHashVa)) {
+        uint8_t clientDataHash[32];
+        if (cbor_get_bytes(cdHashV, cdHashVa, clientDataHash, 32) == 32) {
+          uint8_t expected[16];
+          pinProtocolAuthenticate(pinUvAuthToken, 16, clientDataHash, 32, expected);
+          if (memcmp(expected, paramBuf, 16) == 0 &&
+              (millis() - pinTokenSetAt) < PIN_TOKEN_VALID_MS) {
+            // PIN auth valid — skip fingerprint
+            fidoBusy = true;
+            currentMode = MODE_FIDO2_VERIFYING;
+            updateDisplay();
+            goto make_cred_after_auth;
+          }
+        }
+      }
+      sendCTAPError(cid, CTAP2_ERR_PIN_AUTH_INVALID);
+      return;
+    }
+  } else if (hasPinUvParam) {
+    // Zero-length pinUvAuthParam: device selection probe — wait for touch, return PIN_NOT_SET
+    fidoBusy = true;
+    if (!waitForFingerprintAuth(cid, FP_AUTH_TIMEOUT_MS)) {
+      fidoBusy = false;
+      sendCTAPError(cid, CTAP2_ERR_OPERATION_DENIED);
+      return;
+    }
+    fidoBusy = false;
+    currentMode = MODE_IDLE;
+    updateDisplay();
+    sendCTAPError(cid, pinIsSet() ? CTAP2_ERR_PIN_INVALID : CTAP2_ERR_PIN_NOT_SET);
+    return;
+  }
+
+  // --- Parse rpId early so display can show site name during fingerprint ---
+  {
+    char rpId[128] = {};
+    const uint8_t* rpMap; size_t rpLen;
+    const uint8_t* v;     size_t va;
+    if (cbor_map_find_uint(cbor, cborLen, 0x02, &rpMap, &rpLen) &&
+        cbor_map_find_text(rpMap, rpLen, "id", &v, &va) &&
+        cbor_get_text(v, va, rpId, sizeof(rpId))) {
+      strncpy(fido2RpId, rpId, sizeof(fido2RpId) - 1);
+      fido2RpId[sizeof(fido2RpId) - 1] = '\0';
+    } else {
+      fido2RpId[0] = '\0';
+    }
+  }
 
   // --- Step 1: Fingerprint authentication (3 retries) ---
   fidoBusy = true;
@@ -230,21 +585,18 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     return;
   }
 
-  // Check for CANCEL during fingerprint
   if (drainStalePackets(cid)) {
     fidoBusy = false;
     currentMode = MODE_IDLE;
     updateDisplay();
-    sendCTAPError(cid, 0x2D); // CTAP2_ERR_KEEPALIVE_CANCEL
+    sendCTAPError(cid, 0x2D);
     return;
   }
 
-  // Show "processing" on OLED
   currentMode = MODE_FIDO2_VERIFYING;
   updateDisplay();
 
-  const uint8_t* cbor    = payload + 1;
-  size_t         cborLen = bcnt - 1;
+make_cred_after_auth:
 
   // --- Step 2: Parse clientDataHash (key 0x01) ---
   uint8_t clientDataHash[32];
@@ -274,6 +626,18 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     }
   }
   debugPrintf("  rpId: %s\n", rpId);
+  strncpy(fido2RpId, rpId, sizeof(fido2RpId) - 1);
+  fido2RpId[sizeof(fido2RpId) - 1] = '\0';
+
+  // --- SelectDevice: Windows device-selection probe — do NOT create credential ---
+  if (strcmp(rpId, "SelectDevice") == 0) {
+    debugPrintln("  [SelectDevice] Device selection probe — returning PIN_NOT_SET");
+    fidoBusy = false;
+    currentMode = MODE_IDLE;
+    updateDisplay();
+    sendCTAPError(cid, pinIsSet() ? CTAP2_ERR_PIN_INVALID : CTAP2_ERR_PIN_NOT_SET);
+    return;
+  }
 
   // --- Step 4: Verify ES256 (-7) in pubKeyCredParams (key 0x04) ---
   {
@@ -417,6 +781,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   updateDisplay();
   setLEDPattern(PATTERN_ACTIVE);
   delay(2000);
+  fido2RpId[0] = '\0';  // Clear requester when returning to idle
   currentMode = MODE_IDLE;
   updateDisplay();
   setLEDPattern(PATTERN_IDLE);
@@ -446,6 +811,8 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     }
   }
   debugPrintf("  rpId: %s\n", rpId);
+  strncpy(fido2RpId, rpId, sizeof(fido2RpId) - 1);
+  fido2RpId[sizeof(fido2RpId) - 1] = '\0';
 
   uint8_t clientDataHash[32];
   {
@@ -457,6 +824,43 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
       currentMode = MODE_IDLE; updateDisplay();
       return;
     }
+  }
+
+  // --- ClientPIN: pinUvAuthParam (0x06) — verify or device selection ---
+  const uint8_t* pinUvParamV = nullptr;
+  size_t pinUvParamVa = 0;
+  bool hasPinUvParam = cbor_map_find_uint(cbor, cborLen, 0x06, &pinUvParamV, &pinUvParamVa);
+  bool pinAuthValid = false;
+
+  if (hasPinUvParam && pinUvParamVa > 0) {
+    uint8_t paramBuf[32];
+    size_t paramLen = cbor_get_bytes(pinUvParamV, pinUvParamVa, paramBuf, sizeof(paramBuf));
+    if (paramLen == 16) {
+      uint8_t expected[16];
+      pinProtocolAuthenticate(pinUvAuthToken, 16, clientDataHash, 32, expected);
+      if (memcmp(expected, paramBuf, 16) == 0 &&
+          (millis() - pinTokenSetAt) < PIN_TOKEN_VALID_MS) {
+        pinAuthValid = true;  // Skip fingerprint
+      } else {
+        fidoBusy = false;
+        sendCTAPError(cid, CTAP2_ERR_PIN_AUTH_INVALID);
+        currentMode = MODE_IDLE; updateDisplay();
+        return;
+      }
+    }
+  } else if (hasPinUvParam) {
+    // Zero-length: device selection — wait for touch, return PIN_NOT_SET
+    if (!waitForFingerprintAuth(cid, FP_AUTH_TIMEOUT_MS)) {
+      fidoBusy = false;
+      sendCTAPError(cid, CTAP2_ERR_OPERATION_DENIED);
+      currentMode = MODE_IDLE; updateDisplay();
+      return;
+    }
+    fidoBusy = false;
+    currentMode = MODE_IDLE;
+    updateDisplay();
+    sendCTAPError(cid, pinIsSet() ? CTAP2_ERR_PIN_INVALID : CTAP2_ERR_PIN_NOT_SET);
+    return;
   }
 
   uint8_t rpIdHash[32];
@@ -497,9 +901,10 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     return;
   }
 
-  // Session: skip fingerprint if user just authenticated for same rpId (sites send 2 requests)
-  bool fpSkipped = (memcmp(rpIdHash, lastGetAssertionRpIdHash, 32) == 0 &&
-                    (millis() - lastGetAssertionTime) < GET_ASSERTION_SESSION_MS);
+  // Session: skip fingerprint if PIN auth valid, or user just authenticated for same rpId
+  bool fpSkipped = pinAuthValid ||
+    (memcmp(rpIdHash, lastGetAssertionRpIdHash, 32) == 0 &&
+     (millis() - lastGetAssertionTime) < GET_ASSERTION_SESSION_MS);
   if (fpSkipped) {
     debugPrintln("  [Session] Skipping fingerprint (recent auth for same site)");
   } else {
@@ -588,19 +993,16 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   memcpy(lastGetAssertionRpIdHash, rpIdHash, 32);
   lastGetAssertionTime = millis();
 
-  // If we used session skip, the second response just went out — both responses
-  // are now sent. Show success. If we did fingerprint, return immediately so the
-  // second request (in queue) gets processed before any delay — website needs
-  // both responses quickly.
-  if (fpSkipped) {
-    currentMode = MODE_FIDO2_SUCCESS;
-    updateDisplay();
-    setLEDPattern(PATTERN_ACTIVE);
-    delay(2000);
-    currentMode = MODE_IDLE;
-    updateDisplay();
-    setLEDPattern(PATTERN_IDLE);
-  }
+  // Always show success on OLED after successful auth (fix: was only shown when
+  // fpSkipped, leaving UI stuck at "Signing..." when user did fingerprint)
+  currentMode = MODE_FIDO2_SUCCESS;
+  updateDisplay();
+  setLEDPattern(PATTERN_ACTIVE);
+  delay(2000);
+  fido2RpId[0] = '\0';  // Clear requester when returning to idle
+  currentMode = MODE_IDLE;
+  updateDisplay();
+  setLEDPattern(PATTERN_IDLE);
 }
 
 // ─── CTAPHID_CBOR dispatcher ─────────────────────────────────────────────
@@ -613,6 +1015,7 @@ static void handleCBOR(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     case CTAP2_CMD_MAKE_CREDENTIAL: handleMakeCredential(cid, payload, bcnt); break;
     case CTAP2_CMD_GET_ASSERTION:   handleGetAssertion  (cid, payload, bcnt); break;
     case CTAP2_CMD_GET_INFO:        handleGetInfo(cid);                        break;
+    case CTAP2_CMD_CLIENT_PIN:      handleClientPIN    (cid, payload, bcnt); break;
     default:
       debugPrintf("  cmd 0x%02X not implemented\n", cmd);
       { uint8_t e[1]={0x27}; sendCTAPHIDResponse(cid, CTAPHID_CBOR, e, 1); }

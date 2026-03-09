@@ -12,6 +12,8 @@ void initLEDs();
 void updateLEDs();
 void setLEDPattern(int pattern);
 void restoreSavedLEDs();
+void syncSavedLEDsCache();  // Call after loadLEDColors to avoid EEPROM reads on restore
+void updateSavedLEDsCacheEntry(int index, CRGB color);  // Call when saving a single LED color
 void setAllLEDs(CRGB color);
 void setLED(int index, CRGB color);
 void flashLED(int index);

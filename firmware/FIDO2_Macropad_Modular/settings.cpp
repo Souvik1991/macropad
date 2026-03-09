@@ -128,6 +128,7 @@ void saveLEDColor(int ledIndex, CRGB color) {
   EEPROM.write(addr + 1, color.g);
   EEPROM.write(addr + 2, color.b);
   commitEEPROM("saveLEDColor");
+  updateSavedLEDsCacheEntry(ledIndex, color);
   
   debugPrint("Saved LED ");
   debugPrint(ledIndex);
@@ -163,6 +164,7 @@ void loadLEDColors() {
     leds[i] = color;
   }
   FastLED.show();
+  syncSavedLEDsCache();  // Cache for restoreSavedLEDs (avoids EEPROM read every 500ms)
   debugPrintln("Loaded LED colors from EEPROM");
 }
 

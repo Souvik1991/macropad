@@ -358,16 +358,32 @@ void displayFIDO2Screen() {
   display.drawRect(lockX, lockY + 7, 14, 10, SH110X_WHITE);
 
   display.setCursor(30, 20);
-  display.setTextSize(1);
   display.println(F("PASSKEY AUTH"));
-  display.setCursor(30, 30);
+  int y = 30;
+  // Show requester (e.g. github.com) when available
+  if (fido2RpId[0]) {
+    char buf[20];
+    size_t len = strlen(fido2RpId);
+    if (len >= sizeof(buf)) {
+      memcpy(buf, fido2RpId, sizeof(buf) - 4);
+      buf[sizeof(buf) - 4] = '\0';
+      strcat(buf, "...");
+    } else {
+      strcpy(buf, fido2RpId);
+    }
+    display.setCursor(30, y);
+    display.println(buf);
+    y += 10;
+  }
+  display.setCursor(30, y);
   display.println(F("Please scan"));
-  display.setCursor(30, 40);
+  display.setCursor(30, y + 10);
   display.println(F("your finger"));
 
-  // Show attempt counter if retrying
+  // Show attempt counter if retrying (position lower when rpId shown to avoid overlap)
   if (fpAuthAttempt > 0) {
-    display.setCursor(30, 52);
+    int attemptY = fido2RpId[0] ? 58 : 52;
+    display.setCursor(30, attemptY);
     display.print(F("Attempt "));
     display.print(fpAuthAttempt);
     display.print(F("/3"));
@@ -383,19 +399,35 @@ void displayFIDO2VerifyingScreen() {
 
   // Draw lock icon
   int lockX = 10;
-  int lockY = 22;
+  int lockY = 20;
   display.fillRect(lockX + 2, lockY, 10, 12, SH110X_WHITE);
   display.fillRect(lockX + 4, lockY + 2, 6, 8, SH110X_BLACK);
   display.drawRect(lockX, lockY + 7, 14, 10, SH110X_WHITE);
 
-  display.setCursor(30, 22);
+  display.setCursor(30, 20);
   display.println(F("PASSKEY AUTH"));
-  display.setCursor(30, 34);
+  int y = 30;
+  // Show requester (e.g. github.com) when available
+  if (fido2RpId[0]) {
+    char buf[20];
+    size_t len = strlen(fido2RpId);
+    if (len >= sizeof(buf)) {
+      memcpy(buf, fido2RpId, sizeof(buf) - 4);
+      buf[sizeof(buf) - 4] = '\0';
+      strcat(buf, "...");
+    } else {
+      strcpy(buf, fido2RpId);
+    }
+    display.setCursor(30, y);
+    display.println(buf);
+    y += 10;
+  }
+  display.setCursor(30, y);
   display.println(F("Signing..."));
 
-  // Animated dots
+  // Animated dots on separate line (avoids overlap)
   int dots = (millis() / 500) % 4;
-  display.setCursor(30, 46);
+  display.setCursor(30, y + 10);
   for (int i = 0; i < dots; i++) display.print(F("."));
 }
 
@@ -415,21 +447,36 @@ void displayFIDO2RetryScreen() {
   display.drawLine(fpX, fpY, fpX + 18, fpY + 22, SH110X_WHITE);
   display.drawLine(fpX + 18, fpY, fpX, fpY + 22, SH110X_WHITE);
 
-  display.setCursor(30, 16);
+  int y = 16;
+  // Show site name when available
+  if (fido2RpId[0]) {
+    char buf[20];
+    size_t len = strlen(fido2RpId);
+    if (len >= sizeof(buf)) {
+      memcpy(buf, fido2RpId, sizeof(buf) - 4);
+      buf[sizeof(buf) - 4] = '\0';
+      strcat(buf, "...");
+    } else {
+      strcpy(buf, fido2RpId);
+    }
+    display.setCursor(30, y);
+    display.println(buf);
+    y += 10;
+  }
+  display.setCursor(30, y);
   display.println(F("SCAN FAILED"));
-
-  display.setCursor(30, 28);
+  display.setCursor(30, y + 12);
   display.println(F("Try again"));
 
   // Show retry count
-  display.setCursor(30, 40);
+  display.setCursor(30, y + 24);
   display.print(F("Attempt "));
   display.print(fpAuthAttempt);
   display.print(F("/3"));
 
-  // Progress bar showing attempts used
+  // Progress bar showing attempts used (lower when rpId shown to avoid overlap)
   int barX = 30;
-  int barY = 52;
+  int barY = fido2RpId[0] ? 58 : 52;
   int barW = 80;
   int barH = 6;
   display.drawRect(barX, barY, barW, barH, SH110X_WHITE);
@@ -452,17 +499,33 @@ void displayFIDO2TimeoutScreen() {
   display.drawLine(cX, cY, cX, cY - 6, SH110X_WHITE);  // minute hand
   display.drawLine(cX, cY, cX + 5, cY + 2, SH110X_WHITE);  // hour hand
 
-  display.setCursor(34, 16);
+  int y = 16;
+  // Show site name when available
+  if (fido2RpId[0]) {
+    char buf[20];
+    size_t len = strlen(fido2RpId);
+    if (len >= sizeof(buf)) {
+      memcpy(buf, fido2RpId, sizeof(buf) - 4);
+      buf[sizeof(buf) - 4] = '\0';
+      strcat(buf, "...");
+    } else {
+      strcpy(buf, fido2RpId);
+    }
+    display.setCursor(34, y);
+    display.println(buf);
+    y += 10;
+  }
+  display.setCursor(34, y);
   display.println(F("NO FINGER"));
-
-  display.setCursor(34, 28);
+  display.setCursor(34, y + 12);
   display.println(F("Place finger"));
-  display.setCursor(34, 38);
+  display.setCursor(34, y + 22);
   display.println(F("on sensor"));
 
-  // Show attempt counter
+  // Show attempt counter (position depends on whether rpId was shown)
   if (fpAuthAttempt > 0) {
-    display.setCursor(34, 52);
+    int attemptY = fido2RpId[0] ? 54 : 52;
+    display.setCursor(34, attemptY);
     display.print(F("Attempt "));
     display.print(fpAuthAttempt);
     display.print(F("/3"));
@@ -493,8 +556,7 @@ void displayFIDO2SensorErrorScreen() {
   display.setCursor(36, 40);
   display.println(F("connection"));
 
-  display.setCursor(10, 56);
-  display.println(F("Auth aborted"));
+  centerText(F("Auth aborted"), 56);
 }
 
 // =====================================================
@@ -540,7 +602,20 @@ void displaySuccessScreen() {
   display.println(F("OK!"));
   
   display.setTextSize(1);
-  centerText(F("Welcome back!"), 56);
+  if (fido2RpId[0]) {
+    char buf[20];
+    size_t len = strlen(fido2RpId);
+    if (len >= sizeof(buf)) {
+      memcpy(buf, fido2RpId, sizeof(buf) - 4);
+      buf[sizeof(buf) - 4] = '\0';
+      strcat(buf, "...");
+    } else {
+      strcpy(buf, fido2RpId);
+    }
+    centerText(buf, 56);
+  } else {
+    centerText(F("Welcome back!"), 56);
+  }
 }
 
 void displayErrorScreen() {

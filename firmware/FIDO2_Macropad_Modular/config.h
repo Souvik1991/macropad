@@ -182,6 +182,7 @@ extern uint8_t keySlotMenuItemCount;  // Total items in slot replace menu
 extern uint8_t keySlotReplaceTarget;  // Slot selected for replacement
 extern bool keySlotConfirmYes;        // Confirm dialog selection
 extern uint8_t fpAuthAttempt;          // Current fingerprint auth attempt (1-3) for FIDO2
+extern char fido2RpId[64];             // Requester/relying party ID (e.g. github.com) for display
 extern int8_t sysMenuSelection;        // Highlighted item in system menu (0-based)
 extern uint8_t sysMenuItemCount;       // Total items in system menu
 
