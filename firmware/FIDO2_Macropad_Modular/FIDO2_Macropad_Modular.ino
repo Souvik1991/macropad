@@ -43,9 +43,10 @@
 
 SystemMode currentMode = MODE_IDLE;
 OperatingSystem currentOS = OS_WINDOWS;  // Change to OS_MAC if using Mac
-int volumeLevel = 50;
+float volumeLevel = 50.0f;
 unsigned long volumeOverlayUntil = 0;
 uint8_t fpEnrollStep = 0;  // Fingerprint enrollment scan step (0=idle, 1-3=scanning)
+uint8_t fpStoredCount = 0;  // Cached fingerprint count during enrollment (set at enroll start)
 int8_t fpMenuSelection = 0;      // Highlighted item in delete menu
 uint8_t fpMenuItemCount = 0;     // Total items in delete menu
 uint8_t fpDeleteTargetId = 0;    // ID selected for deletion
@@ -132,6 +133,12 @@ void runBootChecks() {
 // ============================================
 
 void setup() {
+  // ─── CRITICAL: HID interfaces must be registered BEFORE Serial.begin() ───
+  // On ESP32-S3 with TinyUSB, Serial.begin() triggers USB stack enumeration.
+  // Any HID .begin() calls after that point are silently ignored, resulting
+  // in a device with only CDC serial and zero HID interfaces.
+  initUSB();
+
   Serial.begin(115200);
   delay(2000);
   
@@ -139,6 +146,9 @@ void setup() {
   debugPrintln("   ESP32-S3 FIDO2 Macropad Starting");
   debugPrintln("   Modular Version 2.0");
   debugPrintln("========================================");
+  
+  // Wait for USB mount now that Serial is active
+  waitUSBReady();
   
   // Initialize all components
   initSettings();      // Load saved settings first
@@ -148,7 +158,6 @@ void setup() {
   initKeyMatrix();
   initSecureElement();
   initFingerprint();
-  initUSB();
   initFIDO2();                // Load FIDO2 credentials from NVS
   
   debugPrintln("All components initialized");

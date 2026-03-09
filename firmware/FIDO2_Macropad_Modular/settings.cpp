@@ -47,7 +47,7 @@ void initSettings() {
   debugPrintln("========================================");
   debugPrint("  Current OS: ");
   debugPrintln(currentOS == OS_MAC ? "macOS" : "Windows");
-  debugPrintln("  Double-tap Key 12 to switch OS");
+  debugPrintln("  Hold K9+K12 for menu (OS switch)");
   debugPrintln("========================================");
 }
 
@@ -99,6 +99,7 @@ void saveLEDBrightness(uint8_t brightness) {
   EEPROM.write(EEPROM_ADDR_LED_BRIGHTNESS, brightness);
   EEPROM.commit();
   FastLED.setBrightness(brightness);
+  FastLED.show();  // Apply new brightness immediately (updateLEDs doesn't call show() when idle)
   debugPrint("Saved LED brightness: ");
   debugPrintln(brightness);
 }

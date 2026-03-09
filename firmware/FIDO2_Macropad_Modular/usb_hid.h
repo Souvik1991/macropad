@@ -1,6 +1,6 @@
 /*
  * USB HID Module - Header
- * Composite USB: Keyboard + FIDO2 HID (CTAPHID)
+ * Composite USB: Keyboard+Consumer (combined) + FIDO2 HID (CTAPHID)
  */
 
 #ifndef USB_HID_H
@@ -11,13 +11,13 @@
 #include <Adafruit_TinyUSB.h>
 
 // ─── USB interface objects ────────────────────────────────────────────────
-extern Adafruit_USBD_HID usb_kbd;    // Keyboard interface
+extern Adafruit_USBD_HID usb_kbd;    // Combined Keyboard + Consumer Control
 extern Adafruit_USBD_HID usb_fido;   // FIDO2 interface
-extern Adafruit_USBD_HID usb_consumer;  // Consumer Control (volume/mute)
 extern volatile bool fidoBusy;        // Suppress keyboard while FIDO2 is active
 
-// ─── Keyboard functions ──────────────────────────────────────────────────
+// ─── Keyboard + Consumer functions ───────────────────────────────────────
 void initUSB();
+void waitUSBReady();
 void sendKey(uint8_t key);
 void sendKeyCombo(uint8_t modifier, uint8_t key);
 void sendString(const char* str);

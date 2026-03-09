@@ -582,21 +582,21 @@ Circuit Diagram:
   GPIO17 ────────────────→ A (pin 2)                  LED Strip
   (3.3V logic)            │                           │
                           │  ┌──────────────┐         │
-                     OE ──┤1 │              │ 4├──────┘ DIN
-                     (GND) │  │ 74AHCT1G125 │  │     (5V logic)
-                     A  ──┤2 │  Buffer IC   │  │
-                          │  │              │  │
-                    GND ──┤3 │              │ 5├── VCC (5V)
+                     OE ──┤1 │              │ 5├── VCC (5V)
+                     (GND)│  │ 74AHCT1G125  │  │
+                     A  ──┤2 │  Buffer IC   │ 4├──────┘ DIN
+                          │  │              │  │     (5V logic)
+                    GND ──┤3 │              │  │
                           │  └──────────────┘  │
                           │                    │
                          GND                  5V
 
-SN74AHCT1G125 Pinout (SOT-23-5 SMD):
-Top view, dot/pin 1 at top-left:
+SN74AHCT1G125 Pinout (SOT-23-5 SMD, per TI datasheet):
+Top view, pin 1 index at top-left (JEDEC MO-178 / DBV0005A):
      ┌──────────┐
  OE ─┤1        5├─ VCC
      │          │
-  A ─┤2        4├─ Y
+  A ─┤2        4├─ Y  (output to WS2812B DIN)
      │          │
 GND ─┤3         │
      └──────────┘

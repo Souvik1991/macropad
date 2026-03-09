@@ -15,6 +15,7 @@
 #include <Adafruit_SH110X.h>
 #include <FastLED.h>
 #include <SparkFun_ATECCX08a_Arduino_Library.h>
+
 #include <Adafruit_TinyUSB.h>
 #include <EEPROM.h>
 
@@ -28,7 +29,7 @@
 #define SCREEN_ADDRESS 0x3c
 
 // Setup/Configuration URL (shown on OLED when no macros are configured)
-#define SETUP_URL "macropad.local/setup"
+#define SETUP_URL "https://macropad.local/setup"
 
 // ============================================
 // LED CONFIGURATION
@@ -42,6 +43,8 @@
 #define PATTERN_IDLE 0
 #define PATTERN_ACTIVE 1
 #define PATTERN_ERROR 2
+#define PATTERN_VOLUME_MUTE 3    // Red flash for mute (duration = VOLUME_OVERLAY_MS)
+#define PATTERN_VOLUME_UNMUTE 4  // Green flash for unmute (duration = VOLUME_OVERLAY_MS)
 
 // ============================================
 // ENCODER CONFIGURATION (Single Encoder)
@@ -52,7 +55,9 @@
 #define ENCODER_DT  11
 #define ENCODER_SW  12
 
-#define ENCODER_STEP_SIZE 5  // Volume change per encoder tick
+#define ENCODER_STEP_SIZE_WIN 2     // Volume change per encoder tick (Windows)
+#define ENCODER_STEP_SIZE_MAC 6.25f // Volume change per encoder tick (macOS, matches 16-step default)
+#define VOLUME_OVERLAY_MS 1500  // OLED overlay + LED feedback duration (ms)
 
 // ============================================
 // KEY MATRIX CONFIGURATION
@@ -161,9 +166,10 @@ enum OperatingSystem {
 
 extern SystemMode currentMode;
 extern OperatingSystem currentOS;
-extern int volumeLevel;
+extern float volumeLevel;
 extern unsigned long volumeOverlayUntil;  // millis() timestamp for volume overlay auto-hide
 extern uint8_t fpEnrollStep;   // 0 = not enrolling, 1-3 = current scan step
+extern uint8_t fpStoredCount;  // Cached fingerprint count during enrollment (set at enroll start)
 extern int8_t fpMenuSelection;     // Highlighted item in delete menu (0=Back, 1..N=fingerprint IDs)
 extern uint8_t fpMenuItemCount;    // Total items in delete menu
 extern uint8_t fpDeleteTargetId;   // ID selected for deletion
@@ -184,7 +190,7 @@ extern Adafruit_SH1106G display;
 extern CRGB leds[NUM_LEDS];
 extern ATECCX08A atecc;
 extern HardwareSerial fingerprintSerial;
-extern Adafruit_USBD_HID usb_kbd;   // keyboard interface
+extern Adafruit_USBD_HID usb_kbd;   // Combined keyboard + consumer control
 extern Adafruit_USBD_HID usb_fido;  // FIDO2 interface
 
 // ============================================

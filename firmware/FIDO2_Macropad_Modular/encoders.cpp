@@ -58,11 +58,12 @@ void updateEncoders() {
     
     // Only change volume if not muted
     if (!isMuted) {
-      volumeLevel += diff * ENCODER_STEP_SIZE;
-      volumeLevel = constrain(volumeLevel, 0, 100);
+      float stepSize = (currentOS == OS_MAC) ? ENCODER_STEP_SIZE_MAC : (float)ENCODER_STEP_SIZE_WIN;
+      volumeLevel += diff * stepSize;
+      volumeLevel = constrain(volumeLevel, 0.0f, 100.0f);
       
       debugPrint("Volume: ");
-      debugPrint(volumeLevel);
+      debugPrint((int)(volumeLevel + 0.5f));
       debugPrintln("%");
       
       // Send volume HID commands per step (matching tested code)
@@ -79,7 +80,7 @@ void updateEncoders() {
       }
       
       // Trigger volume overlay on OLED
-      volumeOverlayUntil = millis() + 1500;
+      volumeOverlayUntil = millis() + VOLUME_OVERLAY_MS;
     } else {
       debugPrintln("Volume locked (muted)");
     }
@@ -102,15 +103,15 @@ void updateEncoders() {
       // Send mute command
       sendVolumeMute();
       
-      // Visual feedback
+      // Visual feedback (matches OLED overlay duration)
       if (isMuted) {
-        flashAllLEDs(CRGB::Red, 150);
+        setLEDPattern(PATTERN_VOLUME_MUTE);
       } else {
-        flashAllLEDs(CRGB::Green, 150);
+        setLEDPattern(PATTERN_VOLUME_UNMUTE);
       }
       
       // Trigger volume overlay on OLED
-      volumeOverlayUntil = millis() + 1500;
+      volumeOverlayUntil = millis() + VOLUME_OVERLAY_MS;
     }
   } else if (digitalRead(ENCODER_SW) == HIGH && encoderPressed) {
     encoderPressed = false;

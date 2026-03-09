@@ -10,6 +10,7 @@
 #include "fingerprint.h"
 #include "secure.h"
 #include "settings.h"
+#include <stdio.h>
 #include <string.h>
 
 Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -36,6 +37,26 @@ void initDisplay() {
   display.display();
   
   debugPrintln("OK");
+}
+
+// Helper: draw text centered horizontally on screen
+static void centerText(const __FlashStringHelper* text, int y, int textSize = 1) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.setTextSize(textSize);
+  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  int centerX = (SCREEN_WIDTH - (int)w) / 2;
+  display.setCursor(centerX, y);
+  display.print(text);
+}
+static void centerText(const char* text, int y, int textSize = 1) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.setTextSize(textSize);
+  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  int centerX = (SCREEN_WIDTH - (int)w) / 2;
+  display.setCursor(centerX, y);
+  display.print(text);
 }
 
 // Forward declarations for screen renderers
@@ -172,22 +193,29 @@ void drawStatusBar() {
   display.print(currentOS == OS_MAC ? F("Mac") : F("Win"));
   display.print(F("]"));
   
-  // Middle: Volume with mute icon
-  display.setCursor(48, 0);
+  // Right: Volume with mute icon (aligned to extreme right)
+  const int volBlockW = 48;  // Icon ~16px + "100%" or "MUTE" (~28px) - extra space to prevent wrap
+  const int volIconX = SCREEN_WIDTH - volBlockW;
+  display.setCursor(volIconX, 0);
   if (isMutedState()) {
-    // Draw mute icon (speaker with X)
-    display.fillRect(48, 1, 3, 6, SH110X_WHITE);
-    display.fillTriangle(51, 1, 51, 7, 55, 4, SH110X_WHITE);
-    display.drawLine(57, 2, 60, 6, SH110X_WHITE);
-    display.drawLine(60, 2, 57, 6, SH110X_WHITE);
-    display.setCursor(65, 0);
+    // Draw mute icon (filled speaker + X)
+    display.fillRect(volIconX, 2, 3, 5, SH110X_WHITE);
+    display.fillTriangle(volIconX + 2, 2, volIconX + 7, 0, volIconX + 7, 8, SH110X_WHITE);
+    display.fillTriangle(volIconX + 2, 2, volIconX + 2, 6, volIconX + 7, 8, SH110X_WHITE);
+    display.drawLine(volIconX + 10, 2, volIconX + 14, 6, SH110X_WHITE);
+    display.drawLine(volIconX + 14, 2, volIconX + 10, 6, SH110X_WHITE);
+    display.setCursor(volIconX + 17, 0);
     display.print(F("MUTE"));
   } else {
-    // Draw speaker icon
-    display.fillRect(48, 1, 3, 6, SH110X_WHITE);
-    display.fillTriangle(51, 1, 51, 7, 55, 4, SH110X_WHITE);
-    display.setCursor(58, 0);
-    display.print(volumeLevel);
+    // Draw volume icon: filled speaker + sound waves (arcs)
+    display.fillRect(volIconX, 2, 3, 5, SH110X_WHITE);
+    display.fillTriangle(volIconX + 2, 2, volIconX + 7, 0, volIconX + 7, 8, SH110X_WHITE);
+    display.fillTriangle(volIconX + 2, 2, volIconX + 2, 6, volIconX + 7, 8, SH110X_WHITE);
+    // Sound waves: right-facing arcs )
+    display.drawCircleHelper(volIconX + 9, 4, 2, 0x06, SH110X_WHITE);
+    display.drawCircleHelper(volIconX + 9, 4, 4, 0x06, SH110X_WHITE);
+    display.setCursor(volIconX + 16, 0);
+    display.print((int)(volumeLevel + 0.5f));
     display.print(F("%"));
   }
 }
@@ -231,9 +259,8 @@ void displayIdleScreen() {
   int gridBottom = startY + MATRIX_ROWS * rowH + 1;
   display.drawLine(0, gridBottom, SCREEN_WIDTH, gridBottom, SH110X_WHITE);
 
-  // Bottom area: helpful info
-  display.setCursor(0, gridBottom + 3);
-  display.print(F("Hold K9+K12 = Menu"));
+  // Bottom area: helpful info (centered)
+  centerText(F("Hold K9+K12 = Menu"), gridBottom + 3);
 }
 
 // =====================================================
@@ -243,63 +270,47 @@ void displayIdleScreen() {
 void displayVolumeOverlay() {
   display.setTextSize(1);
 
+  // Shared layout: icon + text block (centered, shifted down)
+  const int spkY = 22;
+  const int blockW = isMutedState() ? 88 : 77;  // Muted: icon+"MUTED", Volume: icon+"100%"
+  const int spkX = (SCREEN_WIDTH - blockW) / 2;
+
+  // Speaker icon (body + cone) - same for both muted and volume
+  display.fillRect(spkX, spkY + 2, 4, 7, SH110X_WHITE);
+  display.fillTriangle(spkX + 3, spkY + 2, spkX + 11, spkY - 2, spkX + 11, spkY + 12, SH110X_WHITE);
+  display.fillTriangle(spkX + 3, spkY + 2, spkX + 3, spkY + 8, spkX + 11, spkY + 12, SH110X_WHITE);
+
+  display.setTextSize(2);
   if (isMutedState()) {
-    // --- MUTED display ---
-    // Mute icon: speaker with X (larger, centered)
-    int spkX = 40;
-    int spkY = 16;
-    display.fillRect(spkX, spkY, 6, 12, SH110X_WHITE);
-    display.fillTriangle(spkX + 6, spkY, spkX + 6, spkY + 12, spkX + 14, spkY + 6, SH110X_WHITE);
-    // X mark
-    display.drawLine(spkX + 16, spkY, spkX + 24, spkY + 12, SH110X_WHITE);
-    display.drawLine(spkX + 24, spkY, spkX + 16, spkY + 12, SH110X_WHITE);
-    display.drawLine(spkX + 17, spkY, spkX + 25, spkY + 12, SH110X_WHITE);
-    display.drawLine(spkX + 25, spkY, spkX + 17, spkY + 12, SH110X_WHITE);
-
-    display.setTextSize(2);
-    display.setCursor(30, 34);
+    display.drawLine(spkX + 16, spkY, spkX + 24, spkY + 10, SH110X_WHITE);
+    display.drawLine(spkX + 24, spkY, spkX + 16, spkY + 10, SH110X_WHITE);
+    display.setCursor(spkX + 28, spkY);
     display.print(F("MUTED"));
-    display.setTextSize(1);
   } else {
-    // --- Volume display with progress bar ---
-    // Speaker icon
-    int spkX = 6;
-    int spkY = 16;
-    display.fillRect(spkX, spkY, 6, 12, SH110X_WHITE);
-    display.fillTriangle(spkX + 6, spkY, spkX + 6, spkY + 12, spkX + 14, spkY + 6, SH110X_WHITE);
-    // Sound waves
-    display.drawCircleHelper(spkX + 16, spkY + 6, 4, 0x06, SH110X_WHITE);
-    display.drawCircleHelper(spkX + 16, spkY + 6, 8, 0x06, SH110X_WHITE);
-
-    // Volume percentage (large text)
-    display.setTextSize(2);
-    display.setCursor(36, 14);
-    display.print(volumeLevel);
+    display.drawCircleHelper(spkX + 14, spkY + 5, 3, 0x06, SH110X_WHITE);
+    display.drawCircleHelper(spkX + 14, spkY + 5, 6, 0x06, SH110X_WHITE);
+    display.drawCircleHelper(spkX + 14, spkY + 5, 9, 0x06, SH110X_WHITE);
+    display.setCursor(spkX + 28, spkY);
+    display.print((int)(volumeLevel + 0.5f));
     display.print(F("%"));
-    display.setTextSize(1);
 
-    // --- Progress bar ---
-    int barX = 10;
-    int barY = 38;
-    int barW = 108;
-    int barH = 12;
-
-    // Outer frame
+    // Progress bar (volume only)
+    const int barW = 108;
+    const int barH = 12;
+    const int barX = (SCREEN_WIDTH - barW) / 2;
+    const int barY = 42;
     display.drawRect(barX, barY, barW, barH, SH110X_WHITE);
     display.drawRect(barX + 1, barY + 1, barW - 2, barH - 2, SH110X_WHITE);
-
-    // Filled portion
-    int fillW = ((barW - 4) * volumeLevel) / 100;
+    int fillW = (int)((barW - 4) * volumeLevel / 100.0f);
     if (fillW > 0) {
       display.fillRect(barX + 2, barY + 2, fillW, barH - 4, SH110X_WHITE);
     }
-
-    // Tick marks at 25%, 50%, 75%
     for (int pct = 25; pct < 100; pct += 25) {
       int tickX = barX + 2 + ((barW - 4) * pct) / 100;
       display.drawLine(tickX, barY + barH + 1, tickX, barY + barH + 3, SH110X_WHITE);
     }
   }
+  display.setTextSize(1);
 }
 
 void displayFIDO2Screen() {
@@ -571,14 +582,10 @@ void displayFPEnrollScreen() {
     }
   }
 
-  // Capacity info at bottom
-  display.setCursor(14, 57);
-  display.print(F("Stored: "));
-  // We can't call getFingerprintCount here (blocking UART), use fpMenuItemCount if set
-  // or show step progress. Show a static label instead.
-  display.print(fpEnrollStep);
-  display.print(F("/3  Max:"));
-  display.print(USER_MAX_CNT);
+  // Capacity info at bottom (compact format to fit 128px: "Stored 5/150")
+  char buf[24];
+  snprintf(buf, sizeof(buf), "Stored %u/%u", fpStoredCount, (unsigned)USER_MAX_CNT);
+  centerText(buf, 57);
 }
 
 // =====================================================
@@ -911,8 +918,7 @@ void displaySystemMenuScreen() {
 void displayBootCheckScreen() {
   display.setTextSize(1);
 
-  display.setCursor(10, 13);
-  display.println(F("SYSTEM CHECK"));
+  centerText(F("SYSTEM CHECK"), 13);
   display.drawLine(0, 23, SCREEN_WIDTH, 23, SH110X_WHITE);
 
   // ATECC608A status
@@ -974,17 +980,18 @@ void displayBootFailScreen() {
 void displayFPRequiredScreen() {
   display.setTextSize(1);
 
-  // Fingerprint icon
-  int fpX = 50;
-  int fpY = 14;
-  display.drawRoundRect(fpX, fpY, 18, 22, 6, SH110X_WHITE);
-  display.drawRoundRect(fpX + 4, fpY + 5, 10, 12, 4, SH110X_WHITE);
-  display.drawRoundRect(fpX + 7, fpY + 8, 4, 6, 2, SH110X_WHITE);
-
+  // Text on left
   display.setCursor(4, 14);
   display.println(F("NO FINGER"));
   display.setCursor(4, 24);
   display.println(F("ENROLLED"));
+
+  // Fingerprint/encoder icon (3 concentric shapes) - right side to avoid overlap
+  int fpX = 78;
+  int fpY = 14;
+  display.drawRoundRect(fpX, fpY, 18, 22, 6, SH110X_WHITE);
+  display.drawRoundRect(fpX + 4, fpY + 5, 10, 12, 4, SH110X_WHITE);
+  display.drawRoundRect(fpX + 7, fpY + 8, 4, 6, 2, SH110X_WHITE);
 
   display.setCursor(4, 40);
   display.println(F("Press encoder to"));
@@ -999,8 +1006,7 @@ void displayFPRequiredScreen() {
 void displaySetupNeededScreen() {
   display.setTextSize(1);
 
-  display.setCursor(10, 14);
-  display.println(F("NO MACROS SET"));
+  centerText(F("NO MACROS SET"), 14);
   display.drawLine(0, 24, SCREEN_WIDTH, 24, SH110X_WHITE);
 
   display.setCursor(4, 28);

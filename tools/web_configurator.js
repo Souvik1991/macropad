@@ -252,7 +252,7 @@ const defaultMacros = [
 function generateMacroCards() {
     const grid = document.getElementById('macrosGrid');
     grid.innerHTML = '';
-    
+
     for (let i = 0; i < 12; i++) {
         // Get default or loaded macro config
         let macroConfig;
@@ -261,11 +261,10 @@ function generateMacroCards() {
         if (loadedMacros[i]) {
             // Use loaded config
             macroConfig = loadedMacros[i];
-            keyName = customKeyNames[i] || defaultMacros[i].label;
+            keyName = customKeyNames[i] ?? macroConfig.keyName ?? '';
         } else {
-            // Use default config for current OS
-            const defaultConfig = defaultMacros[i];
-            keyName = customKeyNames[i] || defaultConfig.label;
+            // Initial setup: no default names or sequences, user-configurable
+            keyName = customKeyNames[i] ?? '';
 
             // Create OS-specific config
             macroConfig = {
@@ -276,18 +275,10 @@ function generateMacroCards() {
                 keyName: keyName
             };
 
-            // Initialize sequence steps for both OS
+            // Initialize empty sequence steps (no defaults - user configures from scratch)
             if (!sequenceSteps[i]) {
-                sequenceSteps[i] = {windows: [], mac: []};
+                sequenceSteps[i] = { windows: [], mac: [] };
             }
-
-            // Load default sequences for both Windows and Mac
-            ['windows', 'mac'].forEach(osKey => {
-                if (defaultConfig[osKey] && defaultConfig[osKey].sequenceSteps) {
-                    sequenceSteps[i][osKey] = JSON.parse(JSON.stringify(defaultConfig[osKey].sequenceSteps));
-                    console.log(`Loaded ${defaultConfig[osKey].sequenceSteps.length} ${osKey} steps for key ${i}`);
-                }
-            });
         }
 
         // Store original state for change detection
@@ -296,8 +287,8 @@ function generateMacroCards() {
             originalMacros[i].keyName = keyName;
         }
         // Store original sequence steps
-        originalMacros[i].sequenceSteps = JSON.parse(JSON.stringify(sequenceSteps[i] || {windows: [], mac: []}));
-        
+        originalMacros[i].sequenceSteps = JSON.parse(JSON.stringify(sequenceSteps[i] || { windows: [], mac: [] }));
+
         const card = document.createElement('div');
         card.className = 'macro-card';
         card.innerHTML = `
@@ -310,7 +301,7 @@ function generateMacroCards() {
                 <p class="help-text" style="margin-top: 5px;">Max 12 characters</p>
             </div>
             
-            <h3 id="keyTitle${i}" style="margin-top: 0;">Key ${i + 1}: ${keyName}</h3>
+            <h3 id="keyTitle${i}" style="margin-top: 0;">Key ${i + 1}${keyName ? ': ' + keyName : ''}</h3>
             
             <div class="form-group">
                 <label><strong>What should this key do?</strong></label>
@@ -359,7 +350,7 @@ function generateKeyOptions(selectedKeycode = 0) {
         if (/^[A-Z]$/.test(nameB)) return 1;
         return nameA.localeCompare(nameB);
     });
-    
+
     return keys.map(code => {
         const name = keyNames[code];
         const selected = parseInt(code) === selectedKeycode ? 'selected' : '';
@@ -407,8 +398,8 @@ function getCurrentMacroState(index) {
         return {
             type: type,
             keyName: keyName,
-            sequenceSteps: JSON.stringify({windows: currentWindowsSteps, mac: currentMacSteps}),
-            originalSequenceSteps: JSON.stringify({windows: originalWindowsSteps, mac: originalMacSteps})
+            sequenceSteps: JSON.stringify({ windows: currentWindowsSteps, mac: currentMacSteps }),
+            originalSequenceSteps: JSON.stringify({ windows: originalWindowsSteps, mac: originalMacSteps })
         };
     }
 
@@ -417,34 +408,34 @@ function getCurrentMacroState(index) {
 
 function checkMacroChanges(index) {
     if (!originalMacros[index]) return;
-    
+
     const current = getCurrentMacroState(index);
     const original = originalMacros[index];
-    
+
     let hasChanges = false;
-    
+
     if (current.type === 4) {
         hasChanges = current.sequenceSteps !== current.originalSequenceSteps;
     } else if (current.type === 0 && original.type === 0) {
         hasChanges = false;
     } else {
-        hasChanges = 
+        hasChanges =
             current.type !== original.type ||
             current.modifier !== original.modifier ||
             current.keycode !== original.keycode ||
             current.data !== (original.data || '');
     }
-    
+
     // Check key name changes
     const currentKeyName = current.keyName || '';
     const originalKeyName = original.keyName || '';
     if (currentKeyName !== originalKeyName) {
         hasChanges = true;
     }
-    
+
     const saveBtn = document.getElementById(`saveMacroBtn${index}`);
     const cancelBtn = document.getElementById(`cancelMacroBtn${index}`);
-    
+
     if (saveBtn) {
         saveBtn.disabled = !hasChanges;
     }
@@ -454,14 +445,14 @@ function checkMacroChanges(index) {
 }
 
 // Make cancel function globally accessible
-window.cancelMacroChanges = function(index) {
+window.cancelMacroChanges = function (index) {
     if (!originalMacros[index]) return;
-    
+
     const original = originalMacros[index];
     const typeSelect = document.getElementById(`macroType${index}`);
-    
+
     if (!typeSelect) return;
-    
+
     // Reset key name
     const nameInput = document.getElementById(`keyName${index}`);
     const titleElement = document.getElementById(`keyTitle${index}`);
@@ -472,7 +463,7 @@ window.cancelMacroChanges = function(index) {
         }
         customKeyNames[index] = original.keyName;
     }
-    
+
     // Reset type
     typeSelect.value = original.type;
     updateMacroUI(index);
@@ -487,10 +478,10 @@ window.cancelMacroChanges = function(index) {
         }
     } else if (original.type === 4) {
         // Sequence (OS-specific)
-        sequenceSteps[index] = original.sequenceSteps ? JSON.parse(JSON.stringify(original.sequenceSteps)) : {windows: [], mac: []};
+        sequenceSteps[index] = original.sequenceSteps ? JSON.parse(JSON.stringify(original.sequenceSteps)) : { windows: [], mac: [] };
         updateSequencePreview(index);
     }
-    
+
     updateMacroPreview(index);
     checkMacroChanges(index);
 };
@@ -502,24 +493,25 @@ function cancelMacroChanges(index) {
 
 
 // Make function globally accessible
-window.openSequenceModal = function(index) {
+window.openSequenceModal = function (index) {
     currentSequenceIndex = index;
     const modal = document.getElementById('sequenceModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalBody = document.getElementById('modalBody');
-    
+
     if (!modal || !modalTitle || !modalBody) {
         console.error('Modal elements not found!', { modal, modalTitle, modalBody });
         alert('Error: Modal elements not found. Please refresh the page.');
         return;
     }
-    
-    // Set title
-    modalTitle.textContent = `🔗 Configure Key ${index + 1}: ${defaultMacros[index].label}`;
-    
+
+    // Set title (use custom name if set, otherwise "Key N")
+    const keyLabel = customKeyNames[index] || document.getElementById(`keyName${index}`)?.value?.trim() || '';
+    modalTitle.textContent = `🔗 Configure Key ${index + 1}${keyLabel ? ': ' + keyLabel : ''}`;
+
     // Initialize sequence if needed
     if (!sequenceSteps[index]) {
-        sequenceSteps[index] = {windows: [], mac: []};
+        sequenceSteps[index] = { windows: [], mac: [] };
     }
     if (!sequenceSteps[index].windows) sequenceSteps[index].windows = [];
     if (!sequenceSteps[index].mac) sequenceSteps[index].mac = [];
@@ -593,14 +585,14 @@ window.openSequenceModal = function(index) {
     // Render steps
     renderSequenceSteps(index, 'modalSequenceSteps');
     updateModalPreview(index);
-    
+
     // Show modal
     modal.style.display = 'block';
 };
 
 // Also keep the function name for backward compatibility
 // OS tab management
-window.setActiveOSTab = function(os, index) {
+window.setActiveOSTab = function (os, index) {
     const previousOS = currentOS;
     currentOS = os;
 
@@ -677,7 +669,7 @@ function saveSequenceFromModal() {
 
         // Apply changes to main sequenceSteps object
         if (!sequenceSteps[indexToSave]) {
-            sequenceSteps[indexToSave] = {windows: [], mac: []};
+            sequenceSteps[indexToSave] = { windows: [], mac: [] };
         }
         sequenceSteps[indexToSave].windows = JSON.parse(JSON.stringify(modalSequenceSteps.windows || []));
         sequenceSteps[indexToSave].mac = JSON.parse(JSON.stringify(modalSequenceSteps.mac || []));
@@ -739,7 +731,7 @@ function updateSequencePreview(index) {
     preview.innerHTML = '';
 
     if (!sequenceSteps[index]) {
-        sequenceSteps[index] = {windows: [], mac: []};
+        sequenceSteps[index] = { windows: [], mac: [] };
     }
 
     const windowsSteps = sequenceSteps[index].windows || [];
@@ -806,7 +798,7 @@ function updateModalPreview(index) {
     if (!previewText) return;
 
     if (!modalSequenceSteps) {
-        modalSequenceSteps = {windows: [], mac: []};
+        modalSequenceSteps = { windows: [], mac: [] };
     }
 
     const currentSteps = currentOS === 'both' ? modalSequenceSteps.windows : modalSequenceSteps[currentOS];
@@ -823,7 +815,7 @@ function updateModalPreview(index) {
 
 function initializeSequenceBuilder(index) {
     if (!sequenceSteps[index]) {
-        sequenceSteps[index] = {windows: [], mac: []};
+        sequenceSteps[index] = { windows: [], mac: [] };
     }
     if (!sequenceSteps[index].windows) sequenceSteps[index].windows = [];
     if (!sequenceSteps[index].mac) sequenceSteps[index].mac = [];
@@ -831,12 +823,12 @@ function initializeSequenceBuilder(index) {
 }
 
 // Make sequence functions globally accessible
-window.addSequenceStep = function(index, stepType) {
+window.addSequenceStep = function (index, stepType) {
     const isInModal = currentSequenceIndex === index;
 
     // Initialize modalSequenceSteps if needed
     if (isInModal && !modalSequenceSteps) {
-        modalSequenceSteps = {windows: [], mac: []};
+        modalSequenceSteps = { windows: [], mac: [] };
     }
 
     const step = {
@@ -862,7 +854,7 @@ window.addSequenceStep = function(index, stepType) {
             modalSequenceSteps.windows.push(JSON.parse(JSON.stringify(step)));
             modalSequenceSteps.mac.push(JSON.parse(JSON.stringify(step)));
         } else {
-            if (!sequenceSteps[index]) sequenceSteps[index] = {windows: [], mac: []};
+            if (!sequenceSteps[index]) sequenceSteps[index] = { windows: [], mac: [] };
             if (!sequenceSteps[index].windows) sequenceSteps[index].windows = [];
             if (!sequenceSteps[index].mac) sequenceSteps[index].mac = [];
             sequenceSteps[index].windows.push(JSON.parse(JSON.stringify(step)));
@@ -872,7 +864,7 @@ window.addSequenceStep = function(index, stepType) {
         if (isInModal) {
             modalSequenceSteps[currentOS].push(step);
         } else {
-            if (!sequenceSteps[index]) sequenceSteps[index] = {windows: [], mac: []};
+            if (!sequenceSteps[index]) sequenceSteps[index] = { windows: [], mac: [] };
             if (!sequenceSteps[index][currentOS]) sequenceSteps[index][currentOS] = [];
             sequenceSteps[index][currentOS].push(step);
         }
@@ -890,7 +882,7 @@ window.addSequenceStep = function(index, stepType) {
     }
 }
 
-window.removeSequenceStep = function(index, stepId) {
+window.removeSequenceStep = function (index, stepId) {
     const isInModal = currentSequenceIndex === index;
 
     if (isInModal && !modalSequenceSteps) return;
@@ -925,7 +917,7 @@ window.removeSequenceStep = function(index, stepId) {
     }
 }
 
-window.moveSequenceStep = function(index, stepId, direction) {
+window.moveSequenceStep = function (index, stepId, direction) {
     const isInModal = currentSequenceIndex === index;
 
     if (isInModal && !modalSequenceSteps) return;
@@ -972,13 +964,13 @@ function renderSequenceSteps(index, containerId = null) {
 
     if (isInModal) {
         if (!modalSequenceSteps) {
-            modalSequenceSteps = {windows: [], mac: []};
+            modalSequenceSteps = { windows: [], mac: [] };
         }
         if (!modalSequenceSteps.windows) modalSequenceSteps.windows = [];
         if (!modalSequenceSteps.mac) modalSequenceSteps.mac = [];
     } else {
         if (!sequenceSteps[index]) {
-            sequenceSteps[index] = {windows: [], mac: []};
+            sequenceSteps[index] = { windows: [], mac: [] };
         }
         if (!sequenceSteps[index].windows) sequenceSteps[index].windows = [];
         if (!sequenceSteps[index].mac) sequenceSteps[index].mac = [];
@@ -995,7 +987,7 @@ function renderSequenceSteps(index, containerId = null) {
         let stepHtml = `<div class="sequence-step" data-step-id="${step.id}">`;
         stepHtml += `<div class="step-number">${idx + 1}</div>`;
         stepHtml += `<div class="step-content">`;
-        
+
         if (step.type === 'key') {
             // Ensure step.keys is an array for backward compatibility
             if (!step.keys) {
@@ -1058,7 +1050,7 @@ function renderSequenceSteps(index, containerId = null) {
         } else if (step.type === 'release') {
             stepHtml += `<strong>🔓 Release All Keys</strong>`;
         }
-        
+
         stepHtml += `</div>`;
         stepHtml += `<div class="step-actions">`;
         stepHtml += `<button type="button" onclick="window.moveSequenceStep(${index}, ${step.id}, 'up')" ${idx === 0 ? 'disabled' : ''} class="btn-icon">⬆️</button>`;
@@ -1066,12 +1058,12 @@ function renderSequenceSteps(index, containerId = null) {
         stepHtml += `<button type="button" onclick="window.removeSequenceStep(${index}, ${step.id})" class="btn-icon">❌</button>`;
         stepHtml += `</div>`;
         stepHtml += `</div>`;
-        
+
         return stepHtml;
     }).join('');
 }
 
-window.updateSequenceStepModifier = function(index, stepId, modifierValue, checked) {
+window.updateSequenceStepModifier = function (index, stepId, modifierValue, checked) {
     const isInModal = currentSequenceIndex === index;
     const currentSteps = currentOS === 'both' ? (isInModal ? modalSequenceSteps.windows : sequenceSteps[index].windows) : (isInModal ? modalSequenceSteps[currentOS] : sequenceSteps[index][currentOS]);
     const step = currentSteps.find(s => s.id === stepId);
@@ -1092,7 +1084,7 @@ window.updateSequenceStepModifier = function(index, stepId, modifierValue, check
     }
 }
 
-window.updateSequenceStepKey = function(index, stepId, keyIndex, keycode) {
+window.updateSequenceStepKey = function (index, stepId, keyIndex, keycode) {
     const isInModal = currentSequenceIndex === index;
     const currentSteps = currentOS === 'both' ? (isInModal ? modalSequenceSteps.windows : sequenceSteps[index].windows) : (isInModal ? modalSequenceSteps[currentOS] : sequenceSteps[index][currentOS]);
     const step = currentSteps.find(s => s.id === stepId);
@@ -1118,7 +1110,7 @@ window.updateSequenceStepKey = function(index, stepId, keyIndex, keycode) {
     }
 }
 
-window.updateSequenceStepText = function(index, stepId, text) {
+window.updateSequenceStepText = function (index, stepId, text) {
     const isInModal = currentSequenceIndex === index;
     const currentSteps = currentOS === 'both' ? (isInModal ? modalSequenceSteps.windows : sequenceSteps[index].windows) : (isInModal ? modalSequenceSteps[currentOS] : sequenceSteps[index][currentOS]);
     const step = currentSteps.find(s => s.id === stepId);
@@ -1135,7 +1127,7 @@ window.updateSequenceStepText = function(index, stepId, text) {
     }
 }
 
-window.updateSequenceStepDelay = function(index, stepId, delay) {
+window.updateSequenceStepDelay = function (index, stepId, delay) {
     const isInModal = currentSequenceIndex === index;
     const currentSteps = currentOS === 'both' ? (isInModal ? modalSequenceSteps.windows : sequenceSteps[index].windows) : (isInModal ? modalSequenceSteps[currentOS] : sequenceSteps[index][currentOS]);
     const step = currentSteps.find(s => s.id === stepId);
@@ -1153,7 +1145,7 @@ window.updateSequenceStepDelay = function(index, stepId, delay) {
 }
 
 // Multi-key support functions
-window.addStepKey = function(index, stepId) {
+window.addStepKey = function (index, stepId) {
     const isInModal = currentSequenceIndex === index;
     const currentSteps = currentOS === 'both' ? (isInModal ? modalSequenceSteps.windows : sequenceSteps[index].windows) : (isInModal ? modalSequenceSteps[currentOS] : sequenceSteps[index][currentOS]);
     const step = currentSteps.find(s => s.id === stepId);
@@ -1173,7 +1165,7 @@ window.addStepKey = function(index, stepId) {
     }
 }
 
-window.removeStepKey = function(index, stepId, keyIndex) {
+window.removeStepKey = function (index, stepId, keyIndex) {
     const isInModal = currentSequenceIndex === index;
     const currentSteps = currentOS === 'both' ? (isInModal ? modalSequenceSteps.windows : sequenceSteps[index].windows) : (isInModal ? modalSequenceSteps[currentOS] : sequenceSteps[index][currentOS]);
     const step = currentSteps.find(s => s.id === stepId);
@@ -1195,11 +1187,11 @@ window.removeStepKey = function(index, stepId, keyIndex) {
 function updateKeyName(index) {
     const nameInput = document.getElementById(`keyName${index}`);
     const titleElement = document.getElementById(`keyTitle${index}`);
-    
+
     if (nameInput && titleElement) {
-        const newName = nameInput.value.trim() || (index === 11 ? 'Git Pull / OS Switch' : ['Screenshot', 'Mic Mute', 'Video Toggle', 'Lock Screen', 'Copy', 'Cut', 'Paste', 'Delete', 'Open Cursor', 'Inspect Element', 'Open Terminal', 'Git Pull / OS Switch'][index]);
-        customKeyNames[index] = newName;
-        titleElement.textContent = `Key ${index + 1}: ${newName}`;
+        const newName = nameInput.value.trim();
+        customKeyNames[index] = newName || null;
+        titleElement.textContent = `Key ${index + 1}${newName ? ': ' + newName : ''}`;
     }
 }
 
@@ -1209,7 +1201,7 @@ window.updateKeyName = updateKeyName;
 function updateMacroPreview(index) {
     const type = document.getElementById(`macroType${index}`).value;
     const preview = document.getElementById(`macroPreview${index}`);
-    
+
     if (type === '0') {
         preview.innerHTML = '<p class="preview-text disabled">No macro configured</p>';
     } else if (type === '4') {
@@ -1221,7 +1213,7 @@ function updateMacroPreview(index) {
 function generateLEDConfig() {
     const config = document.getElementById('ledConfig');
     config.innerHTML = '';
-    
+
     for (let i = 0; i < 5; i++) {
         const item = document.createElement('div');
         item.className = 'led-item';
@@ -1237,6 +1229,11 @@ function generateLEDConfig() {
 async function connectSerial() {
     try {
         if ('serial' in navigator) {
+            // Clean up any stale connection first (fixes "port is already open" on reconnect)
+            if (port || reader || writer) {
+                await disconnectSerial();
+            }
+
             // Prefer Espressif (0x303A) or Adafruit (0x239A) devices so the
             // browser highlights the macropad in the port picker.  If neither
             // VID matches, the user can still pick any port manually.
@@ -1256,17 +1253,17 @@ async function connectSerial() {
 
             port = selectedPort;
             await port.open({ baudRate: 115200 });
-            
+
             writer = port.writable.getWriter();
             reader = port.readable.getReader();
-            
+
             isConnected = true;
             updateConnectionStatus(true);
             log('Connected to macropad!', 'success');
-            
+
             // Start reading
             readSerial();
-            
+
             document.getElementById('connectBtn').disabled = true;
             document.getElementById('disconnectBtn').disabled = false;
 
@@ -1281,30 +1278,50 @@ async function connectSerial() {
 }
 
 async function disconnectSerial() {
+    if (!port) {
+        log('Already disconnected', 'info');
+        return;
+    }
+
+    isConnected = false;
+    updateConnectionStatus(false);
+
     try {
         if (reader) {
-            await reader.cancel();
+            try {
+                await reader.cancel();
+            } catch (e) { /* ignore */ }
+            try {
+                reader.releaseLock();
+            } catch (e) { /* ignore */ }
             reader = null;
         }
+
         if (writer) {
-            await writer.release();
+            try {
+                await writer.close();
+            } catch (e) { /* ignore */ }
+            try {
+                writer.releaseLock();
+            } catch (e) { /* ignore */ }
             writer = null;
         }
-        if (port) {
+
+        try {
             await port.close();
-            port = null;
-        }
-        
-        isConnected = false;
-        serialBuffer = '';
-        listParsingState = 'idle';
-        updateConnectionStatus(false);
-        log('Disconnected', 'info');
-        
-        document.getElementById('connectBtn').disabled = false;
-        document.getElementById('disconnectBtn').disabled = true;
+        } catch (e) { /* ignore */ }
+        port = null;
+
     } catch (err) {
         log('Disconnect error: ' + err.message, 'error');
+    } finally {
+        serialBuffer = '';
+        listParsingState = 'idle';
+        log('Disconnected', 'info');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        if (connectBtn) connectBtn.disabled = false;
+        if (disconnectBtn) disconnectBtn.disabled = true;
     }
 }
 
@@ -1343,7 +1360,7 @@ async function sendCommand(cmd) {
         log('Not connected!', 'error');
         return;
     }
-    
+
     try {
         const data = new TextEncoder().encode(cmd + '\n');
         await writer.write(data);
@@ -1409,7 +1426,7 @@ async function saveMacro(keyNum) {
         originalMacros[idx] = {
             ...originalMacros[idx],
             type: 4,
-            sequenceSteps: JSON.parse(JSON.stringify(sequenceSteps[idx] || {windows: [], mac: []}))
+            sequenceSteps: JSON.parse(JSON.stringify(sequenceSteps[idx] || { windows: [], mac: [] }))
         };
         checkMacroChanges(idx);
         return;
@@ -1430,7 +1447,7 @@ async function saveMacro(keyNum) {
 
 async function saveSequenceMacro(keyNum, idx) {
     if (!sequenceSteps[idx]) {
-        sequenceSteps[idx] = {windows: [], mac: []};
+        sequenceSteps[idx] = { windows: [], mac: [] };
     }
 
     // Set the macro type to SEQUENCE (4) in EEPROM so the firmware
@@ -1481,7 +1498,7 @@ async function setLEDColor(index) {
     const r = parseInt(color.substr(1, 2), 16);
     const g = parseInt(color.substr(3, 2), 16);
     const b = parseInt(color.substr(5, 2), 16);
-    
+
     const cmd = `LED ${index} ${r} ${g} ${b}`;
     await sendCommand(cmd);
 }
@@ -1496,13 +1513,13 @@ async function setBrightness() {
 async function selectOS(os) {
     document.getElementById('osMac').classList.remove('selected');
     document.getElementById('osWin').classList.remove('selected');
-    
+
     if (os === 'mac') {
         document.getElementById('osMac').classList.add('selected');
     } else {
         document.getElementById('osWin').classList.add('selected');
     }
-    
+
     const cmd = `OS ${os}`;
     await sendCommand(cmd);
 }
@@ -1527,7 +1544,7 @@ function exportConfig() {
 }
 
 // Close modal when clicking outside of it
-window.onclick = function(event) {
+window.onclick = function (event) {
     const modal = document.getElementById('sequenceModal');
     if (event.target == modal) {
         closeSequenceModal();
@@ -1535,7 +1552,7 @@ window.onclick = function(event) {
 }
 
 // Close modal with ESC key
-document.addEventListener('keydown', function(event) {
+document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
         const modal = document.getElementById('sequenceModal');
         if (modal && modal.style.display === 'block') {
@@ -1728,12 +1745,12 @@ function updateUIWithLoadedMacros() {
                     };
                 }
 
-                // Update key name
+                // Update key name (from device only, no defaults)
                 const nameInput = document.getElementById(`keyName${i}`);
                 const titleElement = document.getElementById(`keyTitle${i}`);
-                const keyName = customKeyNames[i] || defaultMacros[i].label;
+                const keyName = customKeyNames[i] ?? macro.keyName ?? '';
                 if (nameInput) nameInput.value = keyName;
-                if (titleElement) titleElement.textContent = `Key ${i + 1}: ${keyName}`;
+                if (titleElement) titleElement.textContent = `Key ${i + 1}${keyName ? ': ' + keyName : ''}`;
 
                 // Update original state so Save button reflects clean state
                 originalMacros[i] = JSON.parse(JSON.stringify(macro));
@@ -1741,7 +1758,7 @@ function updateUIWithLoadedMacros() {
                 if (!originalMacros[i].keyName) {
                     originalMacros[i].keyName = keyName;
                 }
-                originalMacros[i].sequenceSteps = JSON.parse(JSON.stringify(sequenceSteps[i] || {windows: [], mac: []}));
+                originalMacros[i].sequenceSteps = JSON.parse(JSON.stringify(sequenceSteps[i] || { windows: [], mac: [] }));
 
                 updateMacroPreview(i);
                 checkMacroChanges(i);
@@ -1760,6 +1777,8 @@ window.addEventListener('load', () => {
         updateMacroPreview(i);
         checkMacroChanges(i);
     }
+    // Explicit disconnect handler (onclick can be unreliable with async)
+    document.getElementById('disconnectBtn')?.addEventListener('click', () => disconnectSerial());
     log('Configurator ready. Connect to your macropad and click "Refresh Settings" to load existing macros.', 'info');
 });
 

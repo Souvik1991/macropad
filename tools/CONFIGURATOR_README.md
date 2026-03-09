@@ -230,6 +230,22 @@ Address 116-511: Reserved
 - ✅ Verify EEPROM commit succeeded (check Serial output)
 - ✅ Try RESET command to reinitialize
 
+### Settings/Key Names Lost After Every Flash Upload
+**Root cause:** ESP32 stores settings in the NVS (flash) partition. A **full flash erase** during upload wipes this partition. All bytes become 0xFF. The firmware reads the magic byte, gets 0xFF (instead of 0xAB), treats it as "first boot," and overwrites everything with defaults.
+
+**Fix — Arduino IDE:**
+1. Go to **Tools → Erase All Flash Before Sketch Upload**
+2. Set to **Disabled** (or "Only Sketch" if available)
+3. Upload again — your macros, key names, LED colors, and OS mode will be preserved
+
+**Fix — PlatformIO:** Add to `platformio.ini`:
+```ini
+upload_flags = 
+    --before=default_reset
+    --after=hard_reset
+```
+Avoid using `erase` in upload commands.
+
 ### Macros Not Executing
 - ✅ Check macro type (0 = disabled)
 - ✅ Verify keycode is valid HID code

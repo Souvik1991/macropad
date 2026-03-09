@@ -297,6 +297,8 @@ bool enrollFingerprint(uint8_t id) {
   // If id is 0, auto-assign next available ID
   uint8_t newID = (id == 0) ? (uint8_t)(count + 1) : id;
 
+  fpStoredCount = (uint8_t)count;  // Cache for display (can't call getFingerprintCount during draw)
+
   // --- Scan 1 of 3 ---
   fpEnrollStep = 1;
   currentMode = MODE_FP_ENROLL;

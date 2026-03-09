@@ -1,9 +1,11 @@
 /*
  * USB HID Module - Implementation
- * Composite USB: Keyboard + FIDO2 HID (CTAPHID)
+ * Composite USB: Keyboard+Consumer (combined) + FIDO2 HID (CTAPHID)
  *
- * Ported from tested code in tests/07_Multi_HID_Test/07_Multi_HID_Test.ino
- * Two HID interfaces: keyboard (for macros) + FIDO2 (Usage Page 0xF1D0)
+ * Keyboard and Consumer Control share ONE HID interface using report IDs:
+ *   Report ID 1 = Keyboard
+ *   Report ID 2 = Consumer Control (volume/mute)
+ * This keeps total HID interfaces at 2 (within TinyUSB default CFG_TUD_HID=2).
  */
 
 #include "config.h"
@@ -11,10 +13,16 @@
 #include "usb_hid.h"
 #include <string.h>
 
+// ─── Report IDs for combined Keyboard+Consumer interface ─────────────────
+#define RID_KEYBOARD 1
+#define RID_CONSUMER 2
+
 // ─── HID report descriptors ──────────────────────────────────────────────
 
-uint8_t const desc_keyboard_report[] = {
-  TUD_HID_REPORT_DESC_KEYBOARD()
+// Combined: Keyboard (Report ID 1) + Consumer Control (Report ID 2)
+uint8_t const desc_kbd_consumer_report[] = {
+  TUD_HID_REPORT_DESC_KEYBOARD(HID_REPORT_ID(RID_KEYBOARD)),
+  TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(RID_CONSUMER))
 };
 
 // FIDO2: Usage Page 0xF1D0, 64-byte IN+OUT, no Report ID
@@ -25,16 +33,10 @@ uint8_t const desc_fido_report[] = {
   0xC0
 };
 
-// Consumer Control: Volume/Mute (16-bit usage code, standard TinyUSB descriptor)
-uint8_t const desc_consumer_report[] = {
-  TUD_HID_REPORT_DESC_CONSUMER()
-};
-
 // ─── USB interface objects ────────────────────────────────────────────────
 
-Adafruit_USBD_HID usb_kbd;
-Adafruit_USBD_HID usb_fido;
-Adafruit_USBD_HID usb_consumer;
+Adafruit_USBD_HID usb_kbd;    // Combined Keyboard + Consumer Control
+Adafruit_USBD_HID usb_fido;   // FIDO2 (CTAPHID)
 volatile bool fidoBusy = false;
 
 // ─── FIDO2 RX ring buffer (ISR-safe SPSC, lock-free) ─────────────────────
@@ -55,23 +57,19 @@ static void fido_set_report(uint8_t, hid_report_type_t,
   rx_head = next;
 }
 
-// ─── USB Initialization (Composite: Keyboard + FIDO2) ─────────────────────
+// ─── USB Initialization (Composite: Keyboard+Consumer + FIDO2) ────────────
 
 void initUSB() {
-  debugPrint("Initializing USB Composite HID... ");
+  // MUST be called BEFORE Serial.begin() on ESP32-S3.
+  // Serial.begin() triggers TinyUSB stack enumeration; any .begin() calls
+  // after that point are silently ignored (device presents as CDC-only).
 
   TinyUSBDevice.setManufacturerDescriptor("DIY Security");
   TinyUSBDevice.setProductDescriptor("FIDO2 Macropad");
 
-  // Consumer Control interface (volume/mute)
-  usb_consumer.setPollInterval(2);
-  usb_consumer.setReportDescriptor(desc_consumer_report, sizeof(desc_consumer_report));
-  usb_consumer.setStringDescriptor("FIDO2 Macropad Media");
-  usb_consumer.begin();
-
-  // Keyboard interface
+  // Combined Keyboard + Consumer Control (single HID interface, 2 report IDs)
   usb_kbd.setPollInterval(2);
-  usb_kbd.setReportDescriptor(desc_keyboard_report, sizeof(desc_keyboard_report));
+  usb_kbd.setReportDescriptor(desc_kbd_consumer_report, sizeof(desc_kbd_consumer_report));
   usb_kbd.setStringDescriptor("FIDO2 Macropad Keyboard");
   usb_kbd.begin();
 
@@ -82,8 +80,12 @@ void initUSB() {
   usb_fido.setReportCallback(NULL, fido_set_report);
   usb_fido.enableOutEndpoint(true);
   usb_fido.begin();
+}
 
-  // Wait for USB to be ready
+void waitUSBReady() {
+  // Call this AFTER Serial.begin() so debug output is visible.
+
+  debugPrint("Waiting for USB mount... ");
   uint32_t t0 = millis();
   while (!TinyUSBDevice.mounted()) {
     delay(10);
@@ -94,9 +96,9 @@ void initUSB() {
   }
 
   debugPrintln("OK");
-  debugPrint("  Keyboard: ");
+  debugPrint("  Keyboard+Consumer: ");
   debugPrintln(usb_kbd.ready() ? "READY" : "---");
-  debugPrint("  FIDO2:    ");
+  debugPrint("  FIDO2:             ");
   debugPrintln(usb_fido.ready() ? "READY" : "---");
 }
 
@@ -179,24 +181,24 @@ bool drainStalePackets() {
   return cancelled;
 }
 
-// ─── Keyboard functions ──────────────────────────────────────────────────
+// ─── Keyboard functions (Report ID 1) ────────────────────────────────────
 
 void sendKey(uint8_t key) {
   uint8_t keycode[6] = {0};
   keycode[0] = key;
 
-  usb_kbd.keyboardReport(0, 0, keycode);
+  usb_kbd.keyboardReport(RID_KEYBOARD, 0, keycode);
   delay(10);
-  usb_kbd.keyboardRelease(0);
+  usb_kbd.keyboardRelease(RID_KEYBOARD);
 }
 
 void sendKeyCombo(uint8_t modifier, uint8_t key) {
   uint8_t keycode[6] = {0};
   keycode[0] = key;
 
-  usb_kbd.keyboardReport(0, modifier, keycode);
+  usb_kbd.keyboardReport(RID_KEYBOARD, modifier, keycode);
   delay(10);
-  usb_kbd.keyboardRelease(0);
+  usb_kbd.keyboardRelease(RID_KEYBOARD);
 }
 
 void sendString(const char* str) {
@@ -209,30 +211,32 @@ void sendString(const char* str) {
   }
 }
 
+// ─── Consumer Control functions (Report ID 2, same interface) ────────────
+
 void sendVolumeUp() {
   uint16_t usage = HID_USAGE_CONSUMER_VOLUME_INCREMENT;
-  usb_consumer.sendReport(0, &usage, sizeof(usage));
+  usb_kbd.sendReport(RID_CONSUMER, &usage, sizeof(usage));
   delay(10);
   usage = 0;
-  usb_consumer.sendReport(0, &usage, sizeof(usage));
+  usb_kbd.sendReport(RID_CONSUMER, &usage, sizeof(usage));
   debugPrintln("  -> Volume Up");
 }
 
 void sendVolumeDown() {
   uint16_t usage = HID_USAGE_CONSUMER_VOLUME_DECREMENT;
-  usb_consumer.sendReport(0, &usage, sizeof(usage));
+  usb_kbd.sendReport(RID_CONSUMER, &usage, sizeof(usage));
   delay(10);
   usage = 0;
-  usb_consumer.sendReport(0, &usage, sizeof(usage));
+  usb_kbd.sendReport(RID_CONSUMER, &usage, sizeof(usage));
   debugPrintln("  -> Volume Down");
 }
 
 void sendVolumeMute() {
   uint16_t usage = HID_USAGE_CONSUMER_MUTE;
-  usb_consumer.sendReport(0, &usage, sizeof(usage));
+  usb_kbd.sendReport(RID_CONSUMER, &usage, sizeof(usage));
   delay(10);
   usage = 0;
-  usb_consumer.sendReport(0, &usage, sizeof(usage));
+  usb_kbd.sendReport(RID_CONSUMER, &usage, sizeof(usage));
   debugPrintln("  -> Toggle Mute");
 }
 

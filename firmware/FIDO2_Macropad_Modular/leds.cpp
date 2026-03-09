@@ -22,6 +22,7 @@ static bool patternActive = false;
 // Duration (ms) for status patterns before reverting to saved colors
 #define PATTERN_ACTIVE_DURATION 500
 #define PATTERN_ERROR_DURATION 1000
+#define PATTERN_VOLUME_DURATION VOLUME_OVERLAY_MS  // Match OLED overlay timeout
 
 void initLEDs() {
   debugPrint("Initializing LEDs... ");
@@ -67,6 +68,20 @@ void setLEDPattern(int pattern) {
       patternActive = true;
       patternStartTime = millis();
       patternDuration = PATTERN_ERROR_DURATION;
+      break;
+
+    case PATTERN_VOLUME_MUTE:  // Red flash for mute (matches OLED overlay)
+      fill_solid(leds, NUM_LEDS, CRGB(100, 0, 0));
+      patternActive = true;
+      patternStartTime = millis();
+      patternDuration = PATTERN_VOLUME_DURATION;
+      break;
+
+    case PATTERN_VOLUME_UNMUTE:  // Green flash for unmute (matches OLED overlay)
+      fill_solid(leds, NUM_LEDS, CRGB(0, 100, 0));
+      patternActive = true;
+      patternStartTime = millis();
+      patternDuration = PATTERN_VOLUME_DURATION;
       break;
       
     default:

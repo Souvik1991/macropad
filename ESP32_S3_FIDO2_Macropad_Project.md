@@ -309,6 +309,11 @@ RESET                   # Reset to defaults
 - OS mode selector
 - Real-time log
 
+### Preserving Settings When Flashing
+Settings are stored in the ESP32 NVS (flash) partition. To **keep** your macros, key names, LED colors, and preferences when uploading new firmware:
+- **Arduino IDE:** Tools → Erase All Flash Before Sketch Upload → **Disabled**
+- See `tools/CONFIGURATOR_README.md` for full troubleshooting.
+
 ### What Can Be Configured
 - **Macros** (12 keys): Key combos, strings, or special functions
 - **LED Colors** (5 LEDs): Individual RGB colors
