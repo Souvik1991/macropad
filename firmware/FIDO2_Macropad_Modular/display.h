@@ -16,4 +16,7 @@ void displayMessage(const char* line1, const char* line2 = NULL);
 void centerText(const char* text, int y, int textSize = 1);
 void centerText(const __FlashStringHelper* text, int y, int textSize = 1);
 
+// FIDO2 display context: set site name before showing FIDO2 screens, clear when returning to idle
+void setFido2RpId(const char* rpId);
+
 #endif // DISPLAY_H

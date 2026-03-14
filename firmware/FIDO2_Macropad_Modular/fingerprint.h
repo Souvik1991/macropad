@@ -73,6 +73,7 @@ bool enrollFingerprint(uint8_t id);
 bool deleteFingerprint(uint8_t id);
 bool clearAllFingerprints();
 int  getFingerprintCount();
+void invalidateFingerprintCountCache();
 
 // Interactive delete menu (rotary encoder driven)
 void enterFingerprintDeleteMenu();

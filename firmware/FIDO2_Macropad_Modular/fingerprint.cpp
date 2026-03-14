@@ -28,6 +28,11 @@ static bool fpSensorPresent = false;
 // Delete menu internal state
 static int lastMenuEncoderPos = 0;
 
+// Throttle: minimum ms between wake/sleep cycles for getFingerprintCount
+#define FP_COUNT_CACHE_MS  2000
+static int fpCountCache = -1;
+static unsigned long fpCountCacheTime = 0;
+
 bool isFingerprintSensorPresent() {
   return fpSensorPresent;
 }
@@ -49,7 +54,7 @@ static SystemMode enrollReturnMode() {
 /** Wake the fingerprint sensor. RST HIGH, wait 200ms. Call before any UART command. */
 static void fpWake() {
   digitalWrite(FINGERPRINT_RST, HIGH);
-  delay(200);
+  delay(300);
 }
 
 /** Put the fingerprint sensor to sleep. RST LOW. Call after UART operations complete. */
@@ -141,10 +146,21 @@ static int getFingerprintCountInternal() {
   return -1;  // Error
 }
 
+void invalidateFingerprintCountCache() {
+  fpCountCache = -1;
+  fpCountCacheTime = 0;
+}
+
 int getFingerprintCount() {
+  unsigned long now = millis();
+  if (fpCountCache >= 0 && (now - fpCountCacheTime) < FP_COUNT_CACHE_MS) {
+    return fpCountCache;
+  }
   fpWake();
   int count = getFingerprintCountInternal();
   fpSleep();
+  fpCountCache = count;
+  fpCountCacheTime = now;
   return count;
 }
 
@@ -287,6 +303,7 @@ bool enrollFingerprint(uint8_t id) {
   if (count >= USER_MAX_CNT) {
     debugPrintln("  Storage full!");
     fpSleep();
+    invalidateFingerprintCountCache();
     currentMode = MODE_FP_FULL;
     updateDisplay();
     delay(3000);
@@ -316,6 +333,7 @@ bool enrollFingerprint(uint8_t id) {
   if (m != ACK_SUCCESS || fp_RxBuf[4] != ACK_SUCCESS) {
     debugPrintln("  Scan 1 failed!");
     fpSleep();
+    invalidateFingerprintCountCache();
     fpEnrollStep = 0;
     currentMode = MODE_FP_ENROLL_FAIL;
     updateDisplay();
@@ -339,6 +357,7 @@ bool enrollFingerprint(uint8_t id) {
   if (m != ACK_SUCCESS || fp_RxBuf[4] != ACK_SUCCESS) {
     debugPrintln("  Scan 2 failed!");
     fpSleep();
+    invalidateFingerprintCountCache();
     fpEnrollStep = 0;
     currentMode = MODE_FP_ENROLL_FAIL;
     updateDisplay();
@@ -362,6 +381,7 @@ bool enrollFingerprint(uint8_t id) {
   if (m != ACK_SUCCESS || fp_RxBuf[4] != ACK_SUCCESS) {
     debugPrintln("  Scan 3 failed!");
     fpSleep();
+    invalidateFingerprintCountCache();
     fpEnrollStep = 0;
     currentMode = MODE_FP_ENROLL_FAIL;
     updateDisplay();
@@ -373,6 +393,7 @@ bool enrollFingerprint(uint8_t id) {
   // Success!
   debugPrintln("  Fingerprint enrolled successfully!");
   fpSleep();
+  invalidateFingerprintCountCache();
   fpEnrollStep = 0;
   currentMode = MODE_FP_ENROLL_OK;
   updateDisplay();
@@ -405,6 +426,7 @@ bool deleteFingerprint(uint8_t id) {
   m = fpTxAndRxCmd(5, 8, 500);
 
   fpSleep();
+  invalidateFingerprintCountCache();
 
   if (m == ACK_SUCCESS && fp_RxBuf[4] == ACK_SUCCESS) {
     debugPrintln("  Deleted successfully");
@@ -446,6 +468,7 @@ bool clearAllFingerprints() {
   m = fpTxAndRxCmd(5, 8, 500);
 
   fpSleep();
+  invalidateFingerprintCountCache();
 
   if (m == ACK_SUCCESS && fp_RxBuf[4] == ACK_SUCCESS) {
     debugPrintln("  All fingerprints cleared");

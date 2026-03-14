@@ -16,6 +16,19 @@
 
 Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+// FIDO2 display context: site name for passkey screens (set by fido2 module, cleared on idle)
+#define FIDO2_RPID_MAX 48
+static char fido2RpId[FIDO2_RPID_MAX] = "";
+
+void setFido2RpId(const char* rpId) {
+  if (rpId) {
+    strncpy(fido2RpId, rpId, FIDO2_RPID_MAX - 1);
+    fido2RpId[FIDO2_RPID_MAX - 1] = '\0';
+  } else {
+    fido2RpId[0] = '\0';
+  }
+}
+
 void initDisplay() {
   debugPrint("Initializing display... ");
   Wire.begin();
@@ -73,8 +86,7 @@ static void centerTextInRect(const char* text, int rectX, int rectY, int rectW, 
 // Forward declarations for screen renderers
 void drawStatusBar();
 void displayIdleScreen();
-void displayFIDO2Screen();
-void displayFIDO2VerifyingScreen();
+void displayFIDO2Screen(bool isVerifying = false);
 void displaySuccessScreen();
 void displayErrorScreen();
 void displayFIDO2RetryScreen();
@@ -124,10 +136,10 @@ void updateDisplay() {
       }
       break;
     case MODE_FIDO2_WAITING:
-      displayFIDO2Screen();
+      displayFIDO2Screen(false);
       break;
     case MODE_FIDO2_VERIFYING:
-      displayFIDO2VerifyingScreen();
+      displayFIDO2Screen(true);
       break;
     case MODE_FIDO2_SUCCESS:
       displaySuccessScreen();
@@ -347,7 +359,7 @@ void displayVolumeOverlay() {
   display.setTextSize(1);
 }
 
-void displayFIDO2Screen() {
+void displayFIDO2Screen(bool isVerifying) {
   display.setTextSize(1);
 
   // Draw lock icon (bigger, centered)
@@ -357,46 +369,29 @@ void displayFIDO2Screen() {
   display.fillRect(lockX + 4, lockY + 2, 6, 8, SH110X_BLACK);
   display.drawRect(lockX, lockY + 7, 14, 10, SH110X_WHITE);
 
-  display.setCursor(30, 20);
-  display.setTextSize(1);
+  display.setCursor(30, 17);
   display.println(F("PASSKEY AUTH"));
-  display.setCursor(30, 30);
-  display.println(F("Please scan"));
-  display.setCursor(30, 40);
-  display.println(F("your finger"));
+  int y = 27;
+  if (fido2RpId[0]) {
+    display.setCursor(30, y);
+    display.print(fido2RpId);
+  }
+  y += 15;
+  centerText(isVerifying ? F("Signing...") : F("Scan your finger..."), y);
+  display.setCursor(30, y + 10);
+  if (isVerifying) {
+     // Animated dots
+    int dots = (millis() / 500) % 4;
+    for (int i = 0; i < dots; i++) display.print(F("."));
+    return;
+  }
 
   // Show attempt counter if retrying
   if (fpAuthAttempt > 0) {
-    display.setCursor(30, 52);
     display.print(F("Attempt "));
     display.print(fpAuthAttempt);
     display.print(F("/3"));
   }
-}
-
-// =====================================================
-// FIDO2 Verifying/Processing Screen
-// =====================================================
-
-void displayFIDO2VerifyingScreen() {
-  display.setTextSize(1);
-
-  // Draw lock icon
-  int lockX = 10;
-  int lockY = 22;
-  display.fillRect(lockX + 2, lockY, 10, 12, SH110X_WHITE);
-  display.fillRect(lockX + 4, lockY + 2, 6, 8, SH110X_BLACK);
-  display.drawRect(lockX, lockY + 7, 14, 10, SH110X_WHITE);
-
-  display.setCursor(30, 22);
-  display.println(F("PASSKEY AUTH"));
-  display.setCursor(30, 34);
-  display.println(F("Signing..."));
-
-  // Animated dots
-  int dots = (millis() / 500) % 4;
-  display.setCursor(30, 46);
-  for (int i = 0; i < dots; i++) display.print(F("."));
 }
 
 // =====================================================

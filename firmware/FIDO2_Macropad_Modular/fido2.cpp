@@ -125,6 +125,7 @@ bool waitForFingerprintAuth(uint32_t cid, uint32_t timeoutMs) {
         rx_tail = (rx_tail + 1) % RX_QUEUE_DEPTH;
         debugPrintln("[FIDO2] CANCEL received during fingerprint scan");
         fpAuthAttempt = 0;
+        setFido2RpId("");
         currentMode = MODE_IDLE;
         updateDisplay();
         return false;
@@ -224,6 +225,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     currentMode = MODE_FIDO2_ERROR;
     updateDisplay();
     delay(1500);
+    setFido2RpId("");
     currentMode = MODE_IDLE;
     updateDisplay();
     sendCTAPError(cid, CTAP2_ERR_OPERATION_DENIED);
@@ -233,6 +235,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   // Check for CANCEL during fingerprint
   if (drainStalePackets(cid)) {
     fidoBusy = false;
+    setFido2RpId("");
     currentMode = MODE_IDLE;
     updateDisplay();
     sendCTAPError(cid, 0x2D); // CTAP2_ERR_KEEPALIVE_CANCEL
@@ -269,11 +272,13 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
         !cbor_get_text(v, va, rpId, sizeof(rpId))) {
       fidoBusy = false;
       sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+      setFido2RpId("");
       currentMode = MODE_IDLE; updateDisplay();
       return;
     }
   }
   debugPrintf("  rpId: %s\n", rpId);
+  setFido2RpId(rpId);
 
   // --- Step 4: Verify ES256 (-7) in pubKeyCredParams (key 0x04) ---
   {
@@ -297,6 +302,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     if (!ok) {
       fidoBusy = false;
       sendCTAPError(cid, CTAP2_ERR_UNSUPPORTED_ALG);
+      setFido2RpId("");
       currentMode = MODE_IDLE; updateDisplay();
       return;
     }
@@ -309,6 +315,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -320,6 +327,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, CTAP2_ERR_KEY_STORE_FULL);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -330,6 +338,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -341,6 +350,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -382,6 +392,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -392,6 +403,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -417,6 +429,7 @@ void handleMakeCredential(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
   updateDisplay();
   setLEDPattern(PATTERN_ACTIVE);
   delay(2000);
+  setFido2RpId("");
   currentMode = MODE_IDLE;
   updateDisplay();
   setLEDPattern(PATTERN_IDLE);
@@ -441,11 +454,13 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
         !cbor_get_text(v, va, rpId, sizeof(rpId))) {
       fidoBusy = false;
       sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+      setFido2RpId("");
       currentMode = MODE_IDLE; updateDisplay();
       return;
     }
   }
   debugPrintf("  rpId: %s\n", rpId);
+  setFido2RpId(rpId);
 
   uint8_t clientDataHash[32];
   {
@@ -454,6 +469,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
         cbor_get_bytes(v, va, clientDataHash, 32) != 32) {
       fidoBusy = false;
       sendCTAPError(cid, CTAP2_ERR_MISSING_PARAM);
+      setFido2RpId("");
       currentMode = MODE_IDLE; updateDisplay();
       return;
     }
@@ -464,6 +480,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     debugPrintln("  ERR: SHA-256 failed");
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -493,6 +510,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, CTAP2_ERR_NO_CREDENTIALS);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -510,6 +528,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
       currentMode = MODE_FIDO2_ERROR;
       updateDisplay();
       delay(1500);
+      setFido2RpId("");
       currentMode = MODE_IDLE;
       updateDisplay();
       sendCTAPError(cid, CTAP2_ERR_OPERATION_DENIED);
@@ -518,6 +537,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     if (drainStalePackets(cid)) {
       fidoBusy = false;
       resetCtapReassembly();
+      setFido2RpId("");
       currentMode = MODE_IDLE;
       updateDisplay();
       sendCTAPError(cid, 0x2D);
@@ -553,6 +573,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -563,6 +584,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     fidoBusy = false;
     sendCTAPError(cid, 0x7F);
     currentMode = MODE_FIDO2_ERROR; updateDisplay(); delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE; updateDisplay();
     return;
   }
@@ -597,6 +619,7 @@ void handleGetAssertion(uint32_t cid, const uint8_t* payload, uint16_t bcnt) {
     updateDisplay();
     setLEDPattern(PATTERN_ACTIVE);
     delay(2000);
+    setFido2RpId("");
     currentMode = MODE_IDLE;
     updateDisplay();
     setLEDPattern(PATTERN_IDLE);
